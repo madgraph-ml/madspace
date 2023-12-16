@@ -12,7 +12,7 @@ setup(
     version="0.1.0",
     author="Ramon Winterhalder, Theo Heimel",
     author_email="ramon.winterhalder@uclouvain.be",
-    description="Differentiable and GPU ready phase space mappings",
+    description="Differentiable and GPU ready phase-space mappings",
     long_description=long_description,
     long_description_content_type="text/md",
     url=HTTPS_GITHUB_URL,
