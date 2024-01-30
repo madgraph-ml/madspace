@@ -101,8 +101,8 @@ def edot(a: torch.Tensor, b: torch.Tensor):
     the Euclidean metric
     
     Args:
-        a (torch.Tensor): 4-vector with shape shape (b,4)
-        b (torch.Tensor): 4-vector with shape shape (b,4)
+        a (torch.Tensor): 4-vector with shape (b,4)
+        b (torch.Tensor): 4-vector with shape (b,4)
         
     Returns:
         torch.Tensor: Lorentzscalar with shape (b,)
@@ -119,11 +119,11 @@ def boost(k: torch.Tensor, p_boost: torch.Tensor):
         k' -> k  = boost(k', k) = (E, px, py, pz)
 
     Args:
-        k (torch.Tensor): input vector
-        p_boost (torch.Tensor): boosting vector
+        k (torch.Tensor): input vector with shape (b,4)
+        p_boost (torch.Tensor): boosting vector with shape (b,4)
 
     Returns:
-        k' (torch.Tensor): boosted vector
+        k' (torch.Tensor): boosted vector with shape (b,4)
     """
     # Make sure energy is > 0 even after momentum flip (for inverse boost)
     p_boost[:, 0] = torch.abs(p_boost[:, 0])

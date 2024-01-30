@@ -49,7 +49,7 @@ class PhaseSpaceGenerator(nn.Module):
                 If None, the condition is ignored. Defaults to None.
         Returns:
             z: Tensor with shape (batch_size, n_features).
-            logdet: Tensor of shape (batch_size,), the logdet of the mapping.
+            det: Tensor of shape (batch_size,), the det of the mapping.
         """
         self._check_inputs(x, condition)
         return self._forward(x, condition, **kwargs)
@@ -77,7 +77,7 @@ class PhaseSpaceGenerator(nn.Module):
                 If None, the condition is ignored. Defaults to None.
         Returns:
             x: Tensor with shape (batch_size, n_features).
-            logdet: Tensor of shape (batch_size,), the logdet of the mapping.
+            det: Tensor of shape (batch_size,), the det of the mapping.
         """
         self._check_inputs(z, condition)
         return self._inverse(z, condition, **kwargs)
@@ -88,7 +88,7 @@ class PhaseSpaceGenerator(nn.Module):
             f"{self.__class__.__name__} does not provide _inverse(...) method"
         )
 
-    def det(
+    def density(
         self,
         x_or_z: torch.Tensor,
         condition: torch.Tensor = None,
@@ -107,15 +107,14 @@ class PhaseSpaceGenerator(nn.Module):
             x_or_z: Tensor with shape (batch_size, n_features).
             condition (optional): None or Tensor with shape (batch_size, n_features).
                 If None, the condition is ignored. Defaults to None.
-            inverse (bool, optional): return det of inverse pass. Defaults to False.
+            inverse (bool, optional): return density of inverse pass. Defaults to False.
         Returns:
-            det: Tensor of shape (batch_size,).
+            density: Tensor of shape (batch_size,).
         """
         self._check_inputs(x_or_z, condition)
-        return self._det(x_or_z, condition, inverse, **kwargs)
-    
-    def _det(self, x, condition, inverse, **kwargs):
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not provide _inverse(...) method"
-        )
+        if inverse:
+            _, density = self._inverse(x_or_z, condition)
+            return density
+        
+        _, density = self._forward(x_or_z, condition)
+        return density

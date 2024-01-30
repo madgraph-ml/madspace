@@ -10,7 +10,7 @@ import torch.nn as nn
 from .base import PhaseSpaceGenerator
 
 
-class UnstableMassivePropagator(PhaseSpaceGenerator):
+class UnstablePropagator(PhaseSpaceGenerator):
     def __init__(
         self,
         s_min: torch.Tensor,
@@ -22,165 +22,150 @@ class UnstableMassivePropagator(PhaseSpaceGenerator):
 
         self.s_min = s_min
         self.s_max = s_max
-        self.mass = mass
-        self.width = width
 
-        self.y1 = torch.atan((self.s_min - self.mass**2) / (self.mass * self.width))
-        self.y2 = torch.atan((self.s_max - self.mass**2) / (self.mass * self.width))
+        self.m2 = mass**2
+        self.gm = mass * width
 
-    def forward(self, s: torch.Tensor):
+        self.y1 = torch.atan((self.s_min - self.m2) / (self.gm))
+        self.y2 = torch.atan((self.s_max - self.m2) / (self.gm))
+        self.dy21 = self.y2 - self.y1
+
+    def _forward(self, s: torch.Tensor, condition: torch.Tensor):
         """Forward pass from invariant s to random number r"""
-        r = (torch.atan((s - self.mass**2) / (self.mass * self.width)) - self.y1) / (
-            self.y2 - self.y1
-        )
-        det = (
-            self.mass
-            * self.width
-            / (
-                (self.y2 - self.y1)
-                * ((s - self.mass**2) ** 2 + self.mass**2 * self.width**2)
-            )
-        )
+        r = (torch.atan((s - self.m2) / (self.gm)) - self.y1) / self.dy12
+        det = self.gm / self.dy12 / ((s - self.m2) ** 2 + self.gm**2)
 
         return r, det
 
-    def inverse(self, r: torch.Tensor):
+    def _inverse(self, r: torch.Tensor, condition: torch.Tensor):
         """Inverse pass from random number r to invariant s"""
-        s = (
-            self.mass * self.width * torch.tan(self.y1 + (self.y2 - self.y1) * r)
-            + self.mass**2
-        )
-        det = (
-            (self.y2 - self.y1)
-            * ((s - self.mass**2) ** 2 + self.mass**2 * self.width**2)
-        ) / (self.mass * self.width)
+        s = self.gm * torch.tan(self.y1 + self.dy12 * r) + self.m2
+        det = self.dy12 * ((s - self.m2) ** 2 + self.gm**2) / self.gm
 
         return s, det
 
 
-# UNTIL HERE
-## TODO : Do the rest later
+class StablePropagator(PhaseSpaceGenerator):
+    def __init__(
+        self,
+        s_min: torch.Tensor,
+        s_max: torch.Tensor,
+        nu: float = 1.4,
+        mass: torch.Tensor = None,
+    ):
+        super().__init__(dims_in=1, dims_c=None)
 
+        self.s_min = s_min
+        self.s_max = s_max
+        self.nu = nu
+        self.power = 1 - self.nu
 
-def stable_massive_propogator(
-    r_or_s: torch.Tensor,
-    s_min: torch.Tensor,
-    s_max: torch.Tensor,
-    mass: torch.Tensor,
-    nu: float = 0.95,
-    inverse: bool = True,
-):
-    # Energy needs to be higher than mass
-    assert s_min > mass**2
-    if nu == 1.0:
-        if inverse:
-            s = (
-                torch.exp(
-                    r_or_s * torch.log(s_max - mass**2)
-                    + (1 - r_or_s) * torch.log(s_min - mass**2)
-                )
-                + mass**2
-            )
-            logdet = -torch.log(
-                (torch.log(s_max - mass**2) - torch.log(s_min - mass**2))
-                * (s - mass**2)
-            )
-            return s, -logdet
+        if mass is None:
+            self.m2 = -1e-6
         else:
-            r = (torch.log(r_or_s - mass**2) - torch.log(s_min - mass**2)) / (
-                torch.log(s_max - mass**2) - torch.log(s_min - mass**2)
-            )
-            logdet = -torch.log(
-                (torch.log(s_max - mass**2) - torch.log(s_min - mass**2))
-                * (r_or_s - mass**2)
-            )
-            return r, logdet
-    else:
-        if inverse:
-            s = (
-                r_or_s * (s_max - mass**2) ** (1 - nu)
-                + (1 - r_or_s) * (s_min - mass**2) ** (1 - nu)
-            ) ** (1 / (1 - nu)) + mass**2
-            logdet = torch.log(
-                (1 - nu)
-                / (
-                    (s - mass**2) ** nu
-                    * (
-                        (s_max - mass**2) ** (1 - nu)
-                        - (s_min - mass**2) ** (1 - nu)
-                    )
-                )
-            )
-            return s, -logdet
-        else:
-            r = ((r_or_s - mass**2) ** (1 - nu) - (s_min - mass**2) ** (1 - nu)) / (
-                (s_max - mass**2) ** (1 - nu) - (s_min - mass**2) ** (1 - nu)
-            )
-            logdet = torch.log(
-                (1 - nu)
-                / (
-                    (r_or_s - mass**2) ** nu
-                    * (
-                        (s_max - mass**2) ** (1 - nu)
-                        - (s_min - mass**2) ** (1 - nu)
-                    )
-                )
-            )
-            return r, logdet
+            self.m2 = mass**2
 
+        self.q_max = self.s_max - self.m2
+        self.q_min = self.s_max - self.m2
 
-def massless_propogator(
-    r_or_s: torch.Tensor,
-    s_min: torch.Tensor,
-    s_max: torch.Tensor,
-    nu: float = 0.95,
-    m2_eps: float = -1e-8,
-    inverse: bool = True,
-):
-    if nu == 1.0:
-        if inverse:
-            s = (
-                torch.exp(
-                    r_or_s * torch.log(s_max - m2_eps)
-                    + (1 - r_or_s) * torch.log(s_min - m2_eps)
-                )
-                + m2_eps
-            )
-            logdet = -torch.log(
-                (torch.log(s_max - m2_eps) - torch.log(s_min - m2_eps)) * (s - m2_eps)
-            )
-            return s, -logdet
+        if self.nu == 1.0:
+            self._forward = self.forward_1
+            self._inverse = self.inverse_1
         else:
-            r = (torch.log(r_or_s - m2_eps) - torch.log(s_min - m2_eps)) / (
-                torch.log(s_max - m2_eps) - torch.log(s_min - m2_eps)
-            )
-            logdet = -torch.log(
-                (torch.log(s_max - m2_eps) - torch.log(s_min - m2_eps))
-                * (r_or_s - m2_eps)
-            )
-            return r, logdet
-    if inverse:
-        s = (
-            r_or_s * (s_max - m2_eps) ** (1 - nu)
-            + (1 - r_or_s) * (s_min - m2_eps) ** (1 - nu)
-        ) ** (1 / (1 - nu)) + m2_eps
-        logdet = torch.log(
-            (1 - nu)
-            / (
-                (s - m2_eps) ** nu
-                * ((s_max - m2_eps) ** (1 - nu) - (s_min - m2_eps) ** (1 - nu))
-            )
-        )
-        return s, -logdet
-    else:
-        r = ((r_or_s - m2_eps) ** (1 - nu) - (s_min - m2_eps) ** (1 - nu)) / (
-            (s_max - m2_eps) ** (1 - nu) - (s_min - m2_eps) ** (1 - nu)
-        )
-        logdet = torch.log(
-            (1 - nu)
-            / (
-                (r_or_s - m2_eps) ** nu
-                * ((s_max - m2_eps) ** (1 - nu) - (s_min - m2_eps) ** (1 - nu))
-            )
-        )
-        return r, logdet
+            self._forward = self.forward_nu
+            self._inverse = self.inverse_nu
+
+    def forward_1(self, s: torch.Tensor, condition: torch.Tensor):
+        """Forward pass from invariant s to random number r"""
+
+        r = torch.log((s - self.m2) / self.q_min) / torch.log(self.q_max / self.q_min)
+        det = (s - self.m2) * torch.log(self.q_max / self.q_min)
+
+        return r, 1 / det
+
+    def forward_nu(self, s: torch.Tensor, condition: torch.Tensor):
+        """Forward pass from invariant s to random number r"""
+        qmaxpow = self.q_max**self.power
+        qminpow = self.q_min**self.power
+        spow = (s - self.m2) ** self.power
+        r = (spow - qminpow) / (qmaxpow - qminpow)
+        det = (qmaxpow - qminpow) * (s - self.m2) ** self.nu / self.power
+
+        return r, 1 / det
+
+    def inverse_1(self, r: torch.Tensor, condition: torch.Tensor):
+        """Inverse pass from random number r to invariant s"""
+        s = self.q_max**r * self.q_min ** (1 - r) + self.m2
+        det = (s - self.m2) * torch.log(self.q_max / self.q_min)
+
+        return s, det
+
+    def inverse_nu(self, r: torch.Tensor, condition: torch.Tensor):
+        """Inverse pass from random number r to invariant s"""
+        qmaxpow = self.q_max**self.power
+        qminpow = self.q_min**self.power
+        s = (r * qmaxpow + (1 - r) * qminpow) ** (1 / self.power) + self.m2
+        det = (qmaxpow - qminpow) * (s - self.m2) ** self.nu / self.power
+
+        return s, det
+
+# TODO: Need to think about it again
+class _TrainableStablePropagator(PhaseSpaceGenerator):
+    def __init__(
+        self,
+        s_min: torch.Tensor,
+        s_max: torch.Tensor,
+        nu: float = 1.4,
+        mass: torch.Tensor = None,
+    ):
+        super().__init__(dims_in=1, dims_c=None)
+
+        self.s_min = s_min
+        self.s_max = s_max
+        self.nu = nn.Parameter(torch.tensor(nu))
+        self.power = 1 - self.nu
+
+        if mass is None:
+            self.m2 = -1e-6
+        else:
+            self.m2 = mass**2
+
+        self.q_max = self.s_max - self.m2
+        self.q_min = self.s_max - self.m2
+        self.eps = 1e-6
+
+    def forward_1(self, s: torch.Tensor, condition: torch.Tensor):
+        """Forward pass from invariant s to random number r"""
+
+        r = torch.log((s - self.m2) / self.q_min) / torch.log(self.q_max / self.q_min)
+        det = (s - self.m2) * torch.log(self.q_max / self.q_min)
+
+        return r, 1 / det
+
+    def forward_nu(self, s: torch.Tensor, condition: torch.Tensor):
+        """Forward pass from invariant s to random number r"""
+        qmaxpow = self.q_max ** (1 - self.nu)
+        qminpow = self.q_min ** (1 - self.nu)
+        spow = (s - self.m2) ** self.power
+        r = (spow - qminpow) / (qmaxpow - qminpow)
+        det = (qmaxpow - qminpow) * (s - self.m2) ** self.nu / self.power
+
+        return r, 1 / det
+
+    def _inverse(self, r: torch.Tensor, condition: torch.Tensor):
+        """Inverse pass from random number r to invariant s"""
+
+        if torch.lt(torch.abs(self.nu - 1), self.eps):
+            s = self.q_max**r * self.q_min ** (1 - r) + self.m2
+            det = (s - self.m2) * torch.log(self.q_max / self.q_min)
+            if self.nu < 1:
+                self.nu -= self.eps
+            if self.nu > 1:
+                self.nu += self.eps
+        
+        qmaxpow = self.q_max ** (1 - self.nu)
+        qminpow = self.q_min ** (1 - self.nu)
+        s = (r * qmaxpow + (1 - r) * qminpow) ** (1 / (1 - self.nu)) + self.m2
+        det = (qmaxpow - qminpow) * (s - self.m2) ** self.nu / (1 - self.nu)
+
+        return s, det
