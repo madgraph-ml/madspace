@@ -1,22 +1,34 @@
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, Union
 
 import torch
 import torch.nn as nn
 
-class PhaseSpaceGenerator(nn.Module):
-    """Base class for all phase-space generator objects.
-    """
 
-    def __init__(self, dims_in: int, dims_c: Optional[int]):
+class PhaseSpaceMapping(nn.Module):
+    """Base class for all phase-space generator objects."""
+
+    def __init__(
+        self,
+        dims_in: int,
+        dims_out: Optional[int] = None,
+        dims_c: Optional[int] = None,
+        invertible: bool = False,
+    ):
         super().__init__()
         self.dims_in = dims_in
+        self.dims_out = dims_out if dims_out is not None else dims_in
         self.dims_c = dims_c
+        self.invertible = invertible
 
-    def _check_inputs(self, x: torch.Tensor, condition: Optional[torch.Tensor]):
-        if len(x.shape) != 2 or x.shape[1] != self.dims_in:
-            raise ValueError(
-                f"Expected input shape (?, {self.dims_in}), got {x.shape}"
-            )
+    def _check_inputs(
+        self,
+        x: torch.Tensor,
+        condition: Optional[torch.Tensor] = None,
+        rev: bool = False,
+    ):
+        check_dims = self.dims_in if not rev else self.dims_out
+        if len(x.shape) != 2 or x.shape[1] != check_dims:
+            raise ValueError(f"Expected input shape (?, {check_dims}), got {x.shape}")
         if self.dims_c is None:
             return
         if condition is None:
@@ -33,88 +45,43 @@ class PhaseSpaceGenerator(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
+        p_or_z: torch.Tensor,
         condition: Optional[torch.Tensor] = None,
-        **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Forward pass of the mapping ``f``.
-        Conventionally, this is the pass from the
-        momenta/data ``x`` to the latent space ``z``, i.e.
-        ..math::
-            f(x) = z.
-        Args:
-            x: Tensor with shape (batch_size, n_features).
-            condition: None or Tensor with shape (batch_size, n_features).
-                If None, the condition is ignored. Defaults to None.
-        Returns:
-            z: Tensor with shape (batch_size, n_features).
-            det: Tensor of shape (batch_size,), the det of the mapping.
-        """
-        self._check_inputs(x, condition)
-        return self._forward(x, condition, **kwargs)
+        rev: bool = False,
+        jac: bool = False,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        if rev and not self.invertible:
+            raise ValueError("Tried to call inverse of non-invertible transformation")
+        self._check_inputs(p_or_z, rev)
+        if rev:
+            return self.inv_map(p_or_z, condition=condition, jac=jac, **kwargs)
+        return self.map(p_or_z, condition=condition, jac=jac, **kwargs)
 
-    def _forward(self, x, condition, **kwargs):
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not provide _forward(...) method"
-        )
-
-    def inverse(
+    def map(
         self,
         z: torch.Tensor,
-        condition: Optional[torch.Tensor] = None,
-        **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Inverse pass ``f^{-1}`` of the mapping. Conventionally, this is the pass
-        from the random numbers ``z` to the momenta/data ``x``, i.e.
-        ..math::
-            f^{-1}(z) = x.
-        Args:
-            z: Tensor with shape (batch_size, n_features).
-            condition: None or Tensor with shape (batch_size, n_features).
-                If None, the condition is ignored. Defaults to None.
-        Returns:
-            x: Tensor with shape (batch_size, n_features).
-            det: Tensor of shape (batch_size,), the det of the mapping.
-        """
-        self._check_inputs(z, condition)
-        return self._inverse(z, condition, **kwargs)
-
-    def _inverse(self, z, condition, **kwargs):
+        condition: torch.Tensor,
+        jac: bool,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Should be overridden by all subclasses."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not provide _inverse(...) method"
-        )
+        raise NotImplementedError
 
-    def density(
+    def inv_map(
         self,
-        x_or_z: torch.Tensor,
-        condition: torch.Tensor = None,
-        inverse: bool = False,
-        **kwargs
-    ) -> torch.Tensor:
-        """Calculates the jacobian determinant of the mapping:
-        ...math::
-            det = |J|, with
-            J = dz/dx = df(x)/dx
-        or for the inverse mapping:
-        ...math::
-            det = |J_inv|, with
-            J_inv = dx/dz = df^{-1}(z)/dz
-        Args:
-            x_or_z: Tensor with shape (batch_size, n_features).
-            condition (optional): None or Tensor with shape (batch_size, n_features).
-                If None, the condition is ignored. Defaults to None.
-            inverse (bool, optional): return density of inverse pass. Defaults to False.
-        Returns:
-            density: Tensor of shape (batch_size,).
-        """
-        self._check_inputs(x_or_z, condition)
-        if inverse:
-            _, density = self._inverse(x_or_z, condition)
-            return density
-        
-        _, density = self._forward(x_or_z, condition)
-        return density
+        z: torch.Tensor,
+        condition: torch.Tensor,
+        jac: bool,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Should be overridden by all subclasses."""
+        raise NotImplementedError
+
+    def pdf(self, z: torch.Tensor) -> torch.Tensor:
+        """Should be overridden by all subclasses."""
+        raise NotImplementedError
+
+    def pdf_gradient(self, z: torch.Tensor) -> torch.Tensor:
+        """Should be overridden by all subclasses."""
+        raise NotImplementedError
