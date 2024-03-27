@@ -5,7 +5,7 @@ import torch
 from math import pi
 
 
-MIKOWSKI = torch.diag([1.0, -1.0, -1.0, -1.0])
+MINKOWSKI = torch.diag([1.0, -1.0, -1.0, -1.0])
 ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
@@ -13,7 +13,7 @@ RTOL = 4 * torch.finfo(float).eps
 
 def kaellen(a: torch.Tensor, b: torch.Tensor, c: torch.Tensor):
     """Definition of the standard kaellen function [1]
-    
+
     [1] https://en.wikipedia.org/wiki/Källén_function
 
     Args:
@@ -29,29 +29,29 @@ def kaellen(a: torch.Tensor, b: torch.Tensor, c: torch.Tensor):
 
 def rotate_zy(p: torch.Tensor, phi: torch.Tensor, theta: torch.Tensor):
     """Performs rotation around y- and z-axis:
-    
+
         p -> p' = R_z(phi).R_y(theta).p
-        
-    with the explizit matrice following the conventions in [1] 
+
+    with the explizit matrice following the conventions in [1]
     to achieve proper spherical coordinates [2]:
-    
+
     R_z = (  1       0         0      0  )
           (  0   cos(phi)  -sin(phi)  0  )
           (  0   sin(phi)   cos(phi)  0  )
           (  0       0         0      1  )
-          
+
     R_y = (  1       0       0      0       )
           (  0   cos(theta)  0  sin(theta)  )
           (  0       0       1      0       )
           (  0  -sin(theta)  0  cos(theta)  )
-          
+
     For a 3D vector v = (0, 0, |v|)^T this results in the general spherical
     coordinate vector
-    
+
         v -> v' = (  |v|*sin(theta)*cos(phi)  )
                   (  |v|*sin(theta)*sin(phi)  )
                   (  |v|*cos(theta)           )
-          
+
     [1] https://en.wikipedia.org/wiki/Rotation_matrix#In_three_dimensions
     [2] https://en.wikipedia.org/wiki/Spherical_coordinate_system
 
@@ -63,63 +63,71 @@ def rotate_zy(p: torch.Tensor, phi: torch.Tensor, theta: torch.Tensor):
     Returns:
         p' (torch.Tensor): Rotated vector
     """
-    
+
     # Define the rotation
     q0 = p[:, 0]
-    q1 = p[:, 1] * torch.cos(theta) * torch.cos(phi) \
-        + p[:, 3] * torch.sin(theta) * torch.cos(phi) \
+    q1 = (
+        p[:, 1] * torch.cos(theta) * torch.cos(phi)
+        + p[:, 3] * torch.sin(theta) * torch.cos(phi)
         - p[:, 2] * torch.sin(phi)
-    q2 = p[:, 1] * torch.cos(theta) * torch.sin(phi) \
-        + p[:, 3] * torch.sin(theta) * torch.sin(phi) \
+    )
+    q2 = (
+        p[:, 1] * torch.cos(theta) * torch.sin(phi)
+        + p[:, 3] * torch.sin(theta) * torch.sin(phi)
         + p[:, 2] * torch.cos(phi)
+    )
     q3 = p[:, 3] * torch.cos(theta) - p[:, 1] * torch.sin(theta)
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
 
+
 def lsquare(a: torch.Tensor):
     """Gives the lorentz invariant a^2 using
     the Mikowski metric (1.0, -1.0, -1.0, -1.0)
-    
+
     Args:
         a (torch.Tensor): 4-vector with shape shape (b,4)
-        
+
     Returns:
         torch.Tensor: Lorentzscalar with shape (b,)
     """
-    return torch.einsum("bd,dd,bd->b", a, MIKOWSKI, a)
+    return torch.einsum("bd,dd,bd->b", a, MINKOWSKI, a)
+
 
 def ldot(a: torch.Tensor, b: torch.Tensor):
     """Gives the Lorentz inner product ab using
     the Mikowski metric (1.0, -1.0, -1.0, -1.0)
-    
+
     Args:
         a (torch.Tensor): 4-vector with shape shape (b,4)
         b (torch.Tensor): 4-vector with shape shape (b,4)
-        
+
     Returns:
         torch.Tensor: Lorentzscalar with shape (b,)
     """
-    return torch.einsum("bd,dd,bd->b", a, MIKOWSKI, b)
+    return torch.einsum("bd,dd,bd->b", a, MINKOWSKI, b)
+
 
 def edot(a: torch.Tensor, b: torch.Tensor):
     """Gives the euclidean inner product ab using
     the Euclidean metric
-    
+
     Args:
         a (torch.Tensor): 4-vector with shape (b,4)
         b (torch.Tensor): 4-vector with shape (b,4)
-        
+
     Returns:
         torch.Tensor: Lorentzscalar with shape (b,)
     """
     return torch.einsum("bd,bd->b", a, b)
+
 
 def boost(k: torch.Tensor, p_boost: torch.Tensor):
     """
     Boost k into the frame of p_boost in argument.
     This means that the following command, for any vector k=(E, px, py, pz)
     gives:
-    
+
         k  -> k' = boost(k, -k) = (M,0,0,0)
         k' -> k  = boost(k', k) = (E, px, py, pz)
 
@@ -132,16 +140,17 @@ def boost(k: torch.Tensor, p_boost: torch.Tensor):
     """
     # Make sure energy is > 0 even after momentum flip (for inverse boost)
     p_boost[:, 0] = torch.abs(p_boost[:, 0])
-    
+
     # Perform the boost
-    rsq = torch.sqrt(lsquare(p_boost))         
+    rsq = torch.sqrt(lsquare(p_boost))
     k0 = edot(k, p_boost) / rsq
     c1 = (k[:, 0] + k0) / (rsq + p_boost[:, 0])
-    k1 = k[:,1] + c1 * p_boost[:,1]
-    k2 = k[:,2] + c1 * p_boost[:,2]
-    k3 = k[:,3] + c1 * p_boost[:,3]
-    
+    k1 = k[:, 1] + c1 * p_boost[:, 1]
+    k2 = k[:, 2] + c1 * p_boost[:, 2]
+    k3 = k[:, 3] + c1 * p_boost[:, 3]
+
     return torch.stack((k0, k1, k2, k3), dim=-1)
+
 
 def boost_beam(q, rapidity, inverse=False):
     sign = -1.0 if inverse else 1.0
@@ -153,6 +162,7 @@ def boost_beam(q, rapidity, inverse=False):
     p = torch.stack((pi0, pix, piy, piz), axis=-1)
 
     return p
+
 
 def map_fourvector_rambo(xs: torch.Tensor) -> torch.Tensor:
     """Transform unit hypercube points into into four-vectors."""
@@ -182,7 +192,8 @@ def two_body_decay_factor(
             * (M_i_minus_1**2 - (M_i - m_i_minus_1) ** 2)
         )
     )
-    
+
+
 def rambo_func(
     x: Union[float, torch.Tensor],
     nparticles: int,
@@ -244,7 +255,7 @@ def newton(
 ):
     if torch.any(f(a) * f(b) > 0):
         raise ValueError(f"None or no unique root in given intervall [{a},{b}]")
-    
+
     # Define lower/upper boundaries as tensor
     xa = a * torch.ones_like(f(x0))
     xb = b * torch.ones_like(f(x0))
@@ -270,7 +281,7 @@ def newton(
 
         if torch.allclose(x1, x0, atol=XTOL, rtol=RTOL):
             return x1
-        
+
         # Adjust brackets
         low = f(x1) * f(xa) > 0
         xa[low] = x1[low]
