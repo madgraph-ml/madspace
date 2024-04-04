@@ -7,6 +7,7 @@ Based on the mappings described in
     [3] https://freidok.uni-freiburg.de/data/154629
 """
 
+from typing import Optional
 import torch
 from torch import Tensor, sqrt, log, atan2, atan, tan
 
@@ -25,7 +26,7 @@ class DecayBlock(PhaseSpaceMapping):
         m1: Tensor,
         m2: Tensor,
     ):
-        super().__init__(dims_r=(2,), dims_p=(2,4), dims_c=(1,4))
+        super().__init__(dims_r=(2,), dims_p=(2, 4), dims_c=(1, 4))
         self.m1 = m1  # Mass of decay particle 1
         self.m2 = m2  # Mass of decay particle 2
         self.pi = torch.tensor(pi)
@@ -54,7 +55,7 @@ class DecayBlock(PhaseSpaceMapping):
         Returns:
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
         """
-        p0 = cp[:,0]
+        p0 = cp[:, 0]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         p2 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
@@ -118,13 +119,14 @@ class DecayBlock(PhaseSpaceMapping):
     def _log_det(
         self,
         p_or_r: Tensor,
-        condition: Tensor,
+        cp: Tensor,
         inverse: bool = False,
     ):
-        p0 = condition
+        p0 = cp[:, 0]
         logdet = log(self._density(p0))
         return (-1) ** (inverse) * logdet
-    
+
+
 class tChannelBlock(PhaseSpaceMapping):
     """
     Implement anisotropic decay, based on the mapping described in
@@ -136,11 +138,23 @@ class tChannelBlock(PhaseSpaceMapping):
         self,
         m1: Tensor,
         m2: Tensor,
+        mt: Optional[Tensor] = None,
+        wt: Optional[Tensor] = None,
     ):
-        super().__init__(dims_in=2, dims_c=1)
+        super().__init__(dims_r=(2,), dims_p=(2, 4), dims_c=(2, 4))
+        self.mt = mt  # Mass of t-channel particle
+        self.wt = wt  # Width of t-channel particle
         self.m1 = m1  # Mass of decay particle 1
         self.m2 = m2  # Mass of decay particle 2
         self.pi = torch.tensor(pi)
+
+        # TODO make limits smin and smax inputs of mapping and not fixedß
+        if mt is None:
+            self.t_map = sChannelMasslessBlock(nu=2.0)
+        elif wt is None:
+            self.t_map = sChannelZeroWidthBlock(nu=2.0, mass=mt)
+        else:
+            self.t_map = sChannelBWBlock(mass=mt, width=wt)
 
     def _inverse(self, r: Tensor, condition: Tensor):
         """Inverse pass from random numbers to momenta
@@ -188,7 +202,7 @@ class sChannelBWBlock(PhaseSpaceMapping):
         mass: Tensor,
         width: Tensor,
     ):
-        super().__init__(dims_in=1, dims_c=None)
+        super().__init__(dims_r=(1,), dims_p=(1,))
 
         self.s_min = s_min
         self.s_max = s_max
@@ -250,7 +264,7 @@ class sChannelZeroWidthBlock(PhaseSpaceMapping):
         nu: float = 1.4,
         mass: Tensor = None,
     ):
-        super().__init__(dims_in=1, dims_c=None)
+        super().__init__(dims_r=(1,), dims_p=(1,))
 
         self.s_min = s_min
         self.s_max = s_max
