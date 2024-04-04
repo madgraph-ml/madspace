@@ -1,34 +1,23 @@
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional
 
 import torch
+from torch import Tensor
 import torch.nn as nn
 
 
-class PhaseSpaceMapping(nn.Module):
-    """Base class for all phase-space generator objects."""
+class Mapping(nn.Module):
+    """Base class for all mapping objects."""
 
-    def __init__(
-        self,
-        dims_in: int,
-        dims_out: Optional[int] = None,
-        dims_c: Optional[int] = None,
-        invertible: bool = False,
-    ):
+    def __init__(self, dims_in: int, dims_c: Optional[int] = None):
         super().__init__()
         self.dims_in = dims_in
-        self.dims_out = dims_out if dims_out is not None else dims_in
         self.dims_c = dims_c
-        self.invertible = invertible
 
-    def _check_inputs(
-        self,
-        x: torch.Tensor,
-        condition: Optional[torch.Tensor] = None,
-        rev: bool = False,
-    ):
-        check_dims = self.dims_in if not rev else self.dims_out
-        if len(x.shape) != 2 or x.shape[1] != check_dims:
-            raise ValueError(f"Expected input shape (?, {check_dims}), got {x.shape}")
+    def _check_inputs(self, x: Tensor, condition: Optional[Tensor] = None):
+        if len(x.shape) != 2 or x.shape[1] != self.dims_in:
+            raise ValueError(
+                f"Expected input shape (?, { self.dims_in}), got {x.shape}"
+            )
         if self.dims_c is None:
             return
         if condition is None:
@@ -44,44 +33,198 @@ class PhaseSpaceMapping(nn.Module):
                 )
 
     def forward(
+        self, x: Tensor, condition: Optional[Tensor] = None, **kwargs
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Forward pass of the mapping ``f``.
+        Conventionally, this is the pass from the
+        momenta/data ``x`` to the latent space ``z``, i.e.
+        ..math::
+            f(x) = z.
+        Args:
+            x: Tensor with shape=(batch_size, n_features).
+            condition: None or Tensor with shape=(batch_size, n_cond).
+                If None, the condition is ignored. Defaults to None.
+        Returns:
+            z: Tensor with shape=(batch_size, n_rand).
+            logdet: Tensor of shape=(batch_size,), the logdet of the mapping.
+        """
+        self._check_inputs(x, condition)
+        return self._forward(x, condition, **kwargs)
+
+    def _forward(self, x, condition, **kwargs):
+        """Should be overridden by all subclasses."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not provide _forward(...) method"
+        )
+
+    def inverse(
+        self, z: Tensor, condition: Optional[Tensor] = None, **kwargs
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Inverse pass ``f^{-1}`` of the mapping. Conventionally, this is the pass
+        from the random numbers ``z` to the momenta/data ``x``, i.e.
+        ..math::
+            f^{-1}(z) = x.
+        Args:
+            z: Tensor with shape (batch_size, n_rand).
+            condition: None or Tensor with shape (batch_size, n_features).
+                If None, the condition is ignored. Defaults to None.
+        Returns:
+            x: Tensor with shape (batch_size, n_features).
+            logdet: Tensor of shape (batch_size,), the logdet of the mapping.
+        """
+        self._check_inputs(z, condition)
+        return self._inverse(z, condition, **kwargs)
+
+    def _inverse(self, z, condition, **kwargs):
+        """Should be overridden by all subclasses."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not provide _inverse(...) method"
+        )
+
+    def log_det(
         self,
-        p_or_z: torch.Tensor,
-        condition: Optional[torch.Tensor] = None,
-        rev: bool = False,
-        jac: bool = False,
+        x_or_z: Tensor,
+        condition: Tensor = None,
+        inverse: bool = False,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        if rev and not self.invertible:
-            raise ValueError("Tried to call inverse of non-invertible transformation")
-        self._check_inputs(p_or_z, rev)
-        if rev:
-            return self.inv_map(p_or_z, condition=condition, jac=jac, **kwargs)
-        return self.map(p_or_z, condition=condition, jac=jac, **kwargs)
+    ) -> Tensor:
+        """Calculate log det of the mapping only:
+        ...math::
+            log_det = log(|J|), with
+            J = dz/dx = df(x)/dx
+        or for the inverse mapping:
+        ...math::
+            log_det = log(|J_inv|), with
+            J_inv = dx/dz = df^{-1}(z)/dz
+        Args:
+            x_or_z: Tensor with shape (batch_size, n_features/n_rand).
+            condition (optional): None or Tensor with shape (batch_size, n_cond).
+                If None, the condition is ignored. Defaults to None.
+            inverse (bool, optional): return logdet of inverse pass. Defaults to False.
+        Returns:
+            log_det: Tensor of shape (batch_size,).
+        """
+        self._check_inputs(x_or_z, condition)
+        return self._call_log_det(x_or_z, condition, inverse, **kwargs)
 
-    def map(
+    def _call_log_det(self, x, condition, inverse, **kwargs):
+        """Wrapper around _log_det."""
+        if hasattr(self, "_log_det"):
+            return self._log_det(x, condition, inverse, **kwargs)
+        if hasattr(self, "_det"):
+            return torch.log(self._det(x, condition, inverse, **kwargs))
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not provide log_det(...) method"
+        )
+
+    def det(
         self,
-        z: torch.Tensor,
-        condition: torch.Tensor,
-        jac: bool,
+        x_or_z: Tensor,
+        condition: Tensor = None,
+        inverse: bool = False,
         **kwargs,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError
+    ) -> Tensor:
+        """Calculates the jacobian determinant of the mapping:
+        ...math::
+            det = |J|, with
+            J = dz/dx = df(x)/dx
+        or for the inverse mapping:
+        ...math::
+            det = |J_inv|, with
+            J_inv = dx/dz = df^{-1}(z)/dz
+        Args:
+            x_or_z: Tensor with shape (batch_size, n_features).
+            condition (optional): None or Tensor with shape (batch_size, n_features).
+                If None, the condition is ignored. Defaults to None.
+            inverse (bool, optional): return det of inverse pass. Defaults to False.
+        Returns:
+            det: Tensor of shape (batch_size,).
+        """
+        self._check_inputs(x_or_z, condition)
+        return self._call_det(x_or_z, condition, inverse, **kwargs)
 
-    def inv_map(
+    def _call_det(self, x, condition, inverse, **kwargs):
+        """Wrapper around _det."""
+        if hasattr(self, "_det"):
+            return self._det(x, condition, inverse, **kwargs)
+        if hasattr(self, "_log_det"):
+            return torch.exp(self._log_det(x, condition, inverse, **kwargs))
+        raise NotImplementedError("det is not implemented")
+
+    def apply_mapping(self, mapping: "Mapping") -> "ChainedMapping":
+        dims_c = mapping.dims_c if self.dims_c is None else self.dims_c
+        return ChainedMapping(self.dims_in, self.dims_c, [mapping, self])
+
+
+class ConditionalMapping(Mapping):
+    def __init__(
         self,
-        z: torch.Tensor,
-        condition: torch.Tensor,
-        jac: bool,
-        **kwargs,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError
+        dims_in: int,
+        dims_c: Optional[int],
+        condition_mask: Optional[Tensor],
+    ):
+        super().__init__(dims_in, dims_c)
+        if condition_mask is None:
+            condition_mask = torch.ones(dims_c, dtype=torch.bool)
+        elif condition_mask.shape != (dims_c,):
+            raise ValueError(f"Condition mask must have shape (dims_c,)")
+        elif condition_mask.dtype != torch.bool:
+            raise ValueError(f"Condition mask must be boolean tensor")
+        self.register_buffer("condition_mask", condition_mask)
 
-    def pdf(self, z: torch.Tensor) -> torch.Tensor:
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError
 
-    def pdf_gradient(self, z: torch.Tensor) -> torch.Tensor:
-        """Should be overridden by all subclasses."""
-        raise NotImplementedError
+class InverseMapping(Mapping):
+    def __init__(self, dims_in: int, dims_c: Optional[int], mapping: Mapping):
+        super().__init__(dims_in, dims_c)
+        if mapping.dims_in != dims_in:
+            raise ValueError("Mapping input dimensions incompatible")
+        if mapping.dims_c != dims_c:
+            raise ValueError("Mapping condition dimensions incompatible")
+        self.mapping = mapping
+
+    def _forward(self, x, condition, **kwargs):
+        return self.mapping.inverse(x, condition, **kwargs)
+
+    def _inverse(self, z, condition, **kwargs):
+        return self.mapping.forward(z, condition, **kwargs)
+
+    def _log_det(self, x_or_z, condition=None, inverse=False, **kwargs):
+        return self.mapping.log_det(x_or_z, condition, not inverse, **kwargs)
+
+
+class ChainedMapping(Mapping):
+    def __init__(self, dims_in: int, dims_c: Optional[int], mappings: list[Mapping]):
+        super().__init__(dims_in, dims_c)
+        flattened_mappings = []
+        for m in mappings:
+            if dims_in != m.dims_in:
+                raise ValueError("Incompatible input dimension")
+            if m.dims_c is not None and dims_c != m.dims_c:
+                raise ValueError("Incompatible condition dimension")
+            if isinstance(m, ChainedMapping):
+                flattened_mappings.extend(m.mappings)
+            else:
+                flattened_mappings.append(m)
+        self.mappings = nn.ModuleList(flattened_mappings)
+
+    def _forward(self, x, condition, **kwargs):
+        log_jac_all = 0.0
+        for mapping in self.mappings:
+            x, log_jac = mapping.forward(x, condition, **kwargs)
+            log_jac_all += log_jac
+        return x, log_jac_all
+
+    def _inverse(self, z, condition, **kwargs):
+        log_jac_all = 0.0
+        for mapping in reversed(self.mappings):
+            z, log_jac = mapping.inverse(z, condition, **kwargs)
+            log_jac_all += log_jac
+        return z, log_jac_all
+
+    def _log_det(self, x_or_z, condition=None, inverse=False, **kwargs):
+        return sum(
+            mapping.log_det(x_or_z, condition, inverse, **kwargs)
+            for mapping in self.mappings
+        )

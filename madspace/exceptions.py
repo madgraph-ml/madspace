@@ -1,8 +1,4 @@
-"""
-Submodule for useful exceptions
-===============================
-
-"""
+"""Colorful exceptions"""
 
 # Definition of handy colours for printing
 _default = "\x1b[00m"
@@ -13,7 +9,7 @@ class InvalidOperationError(Exception):
     """Exception class for meaningless operations."""
 
     def __init__(self, *args, **kwargs):
-        Exception.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def __str__(self):
         """String representation."""
