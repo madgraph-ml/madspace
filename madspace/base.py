@@ -5,79 +5,97 @@ from torch import Tensor
 import torch.nn as nn
 
 
-class Mapping(nn.Module):
+class PhaseSpaceMapping(nn.Module):
     """Base class for all mapping objects."""
 
-    def __init__(self, dims_in: int, dims_c: Optional[int] = None):
+    def __init__(
+        self,
+        dims_r: Tuple[int],
+        dims_p: Tuple[int],
+        dims_c: Optional[Tuple[int]] = None,
+    ):
         super().__init__()
-        self.dims_in = dims_in
+        self.dims_r = dims_r
+        self.dims_p = dims_p
         self.dims_c = dims_c
 
-    def _check_inputs(self, x: Tensor, condition: Optional[Tensor] = None):
-        if len(x.shape) != 2 or x.shape[1] != self.dims_in:
+    def _check_inputs(
+        self,
+        r_or_p: Tensor,
+        condition: Optional[Tensor] = None,
+        inverse: bool = False,
+    ) -> None:
+        dims_in = self.dims_r if inverse else self.dims_p
+        if r_or_p.shape[1:] != self.dims_r:
             raise ValueError(
-                f"Expected input shape (?, { self.dims_in}), got {x.shape}"
+                f"Expected input shape {dims_in}, but got {tuple(r_or_p.shape[1:])}"
             )
         if self.dims_c is None:
             return
         if condition is None:
             raise ValueError("Expected condition")
         else:
-            if len(condition.shape) != 2 or condition.shape[1] != self.dims_c:
+            if condition.shape[1:] != self.dims_c:
                 raise ValueError(
-                    f"Expected condition shape (?, {self.dims_c}), got {condition.shape}"
+                    f"Expected condition shape {self.dims_c}, got {tuple(condition.shape[1:])}"
                 )
-            if x.shape[0] != condition.shape[0]:
+            if r_or_p.shape[0] != condition.shape[0]:
                 raise ValueError(
                     "Number of input items must be equal to number of condition items."
                 )
 
     def forward(
-        self, x: Tensor, condition: Optional[Tensor] = None, **kwargs
+        self,
+        p: Tensor,
+        condition: Optional[Tensor] = None,
+        **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """
         Forward pass of the mapping ``f``.
         Conventionally, this is the pass from the
-        momenta/data ``x`` to the latent space ``z``, i.e.
+        momenta ``p`` to the random numbers ``r``, i.e.
         ..math::
-            f(x) = z.
+            f(p) = r.
         Args:
-            x: Tensor with shape=(batch_size, n_features).
-            condition: None or Tensor with shape=(batch_size, n_cond).
+            p: Tensor with shape=(b, np, 4).
+            condition: None or Tensor with shape=(b, dc1, [dc2,...]).
                 If None, the condition is ignored. Defaults to None.
         Returns:
-            z: Tensor with shape=(batch_size, n_rand).
-            logdet: Tensor of shape=(batch_size,), the logdet of the mapping.
+            r: Tensor with shape=(b, nr).
+            logdet: Tensor of shape=(b,), the logdet of the mapping.
         """
-        self._check_inputs(x, condition)
-        return self._forward(x, condition, **kwargs)
+        self._check_inputs(p, condition)
+        return self._forward(p, condition, **kwargs)
 
-    def _forward(self, x, condition, **kwargs):
+    def _forward(self, p, condition, **kwargs):
         """Should be overridden by all subclasses."""
         raise NotImplementedError(
             f"{self.__class__.__name__} does not provide _forward(...) method"
         )
 
     def inverse(
-        self, z: Tensor, condition: Optional[Tensor] = None, **kwargs
+        self,
+        r: Tensor,
+        condition: Optional[Tensor] = None,
+        **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """
         Inverse pass ``f^{-1}`` of the mapping. Conventionally, this is the pass
-        from the random numbers ``z` to the momenta/data ``x``, i.e.
+        from the random numbers ``r` to the momenta ``p``, i.e.
         ..math::
-            f^{-1}(z) = x.
+            f^{-1}(r) = p.
         Args:
-            z: Tensor with shape (batch_size, n_rand).
-            condition: None or Tensor with shape (batch_size, n_features).
+            r: Tensor with shape=(b, nr).
+            condition: None or Tensor with shape=(b, dc1, [dc2,...]).
                 If None, the condition is ignored. Defaults to None.
         Returns:
-            x: Tensor with shape (batch_size, n_features).
-            logdet: Tensor of shape (batch_size,), the logdet of the mapping.
+            p: Tensor with shape=(b, np, 4).
+            logdet: Tensor of shape=(b,), the logdet of the mapping.
         """
-        self._check_inputs(z, condition)
-        return self._inverse(z, condition, **kwargs)
+        self._check_inputs(r, condition, inverse=True)
+        return self._inverse(r, condition, **kwargs)
 
-    def _inverse(self, z, condition, **kwargs):
+    def _inverse(self, r, condition, **kwargs):
         """Should be overridden by all subclasses."""
         raise NotImplementedError(
             f"{self.__class__.__name__} does not provide _inverse(...) method"
@@ -85,7 +103,7 @@ class Mapping(nn.Module):
 
     def log_det(
         self,
-        x_or_z: Tensor,
+        p_or_r: Tensor,
         condition: Tensor = None,
         inverse: bool = False,
         **kwargs,
@@ -93,21 +111,21 @@ class Mapping(nn.Module):
         """Calculate log det of the mapping only:
         ...math::
             log_det = log(|J|), with
-            J = dz/dx = df(x)/dx
+            J = dr/dp = df(p)/dp
         or for the inverse mapping:
         ...math::
             log_det = log(|J_inv|), with
-            J_inv = dx/dz = df^{-1}(z)/dz
+            J_inv = dp/dr = df^{-1}(r)/dr
         Args:
-            x_or_z: Tensor with shape (batch_size, n_features/n_rand).
-            condition (optional): None or Tensor with shape (batch_size, n_cond).
+            p_or_z: Tensor with shape=(b, np, 4) or shape=(b, nr).
+            condition (optional): None or Tensor with shape=(b, dc1, [dc2,...]).
                 If None, the condition is ignored. Defaults to None.
             inverse (bool, optional): return logdet of inverse pass. Defaults to False.
         Returns:
-            log_det: Tensor of shape (batch_size,).
+            log_det: Tensor of shape (b,).
         """
-        self._check_inputs(x_or_z, condition)
-        return self._call_log_det(x_or_z, condition, inverse, **kwargs)
+        self._check_inputs(p_or_r, condition, inverse=inverse)
+        return self._call_log_det(p_or_r, condition, inverse, **kwargs)
 
     def _call_log_det(self, x, condition, inverse, **kwargs):
         """Wrapper around _log_det."""
@@ -121,7 +139,7 @@ class Mapping(nn.Module):
 
     def det(
         self,
-        x_or_z: Tensor,
+        p_or_r: Tensor,
         condition: Tensor = None,
         inverse: bool = False,
         **kwargs,
@@ -129,21 +147,21 @@ class Mapping(nn.Module):
         """Calculates the jacobian determinant of the mapping:
         ...math::
             det = |J|, with
-            J = dz/dx = df(x)/dx
+            J = dr/dp = df(p)/dp
         or for the inverse mapping:
         ...math::
             det = |J_inv|, with
-            J_inv = dx/dz = df^{-1}(z)/dz
+            J_inv = dp/dr = df^{-1}(r)/dr
         Args:
-            x_or_z: Tensor with shape (batch_size, n_features).
-            condition (optional): None or Tensor with shape (batch_size, n_features).
+            p_or_z: Tensor with shape=(b, np, 4) or shape=(b, nr).
+            condition (optional): None or Tensor with shape=(b, dc1, [dc2,...]).
                 If None, the condition is ignored. Defaults to None.
-            inverse (bool, optional): return det of inverse pass. Defaults to False.
+            inverse (bool, optional): return logdet of inverse pass. Defaults to False.
         Returns:
-            det: Tensor of shape (batch_size,).
+            det: Tensor of shape (b,).
         """
-        self._check_inputs(x_or_z, condition)
-        return self._call_det(x_or_z, condition, inverse, **kwargs)
+        self._check_inputs(p_or_r, condition, inverse=inverse)
+        return self._call_det(p_or_r, condition, inverse, **kwargs)
 
     def _call_det(self, x, condition, inverse, **kwargs):
         """Wrapper around _det."""
@@ -152,79 +170,3 @@ class Mapping(nn.Module):
         if hasattr(self, "_log_det"):
             return torch.exp(self._log_det(x, condition, inverse, **kwargs))
         raise NotImplementedError("det is not implemented")
-
-    def apply_mapping(self, mapping: "Mapping") -> "ChainedMapping":
-        dims_c = mapping.dims_c if self.dims_c is None else self.dims_c
-        return ChainedMapping(self.dims_in, self.dims_c, [mapping, self])
-
-
-class ConditionalMapping(Mapping):
-    def __init__(
-        self,
-        dims_in: int,
-        dims_c: Optional[int],
-        condition_mask: Optional[Tensor],
-    ):
-        super().__init__(dims_in, dims_c)
-        if condition_mask is None:
-            condition_mask = torch.ones(dims_c, dtype=torch.bool)
-        elif condition_mask.shape != (dims_c,):
-            raise ValueError(f"Condition mask must have shape (dims_c,)")
-        elif condition_mask.dtype != torch.bool:
-            raise ValueError(f"Condition mask must be boolean tensor")
-        self.register_buffer("condition_mask", condition_mask)
-
-
-class InverseMapping(Mapping):
-    def __init__(self, dims_in: int, dims_c: Optional[int], mapping: Mapping):
-        super().__init__(dims_in, dims_c)
-        if mapping.dims_in != dims_in:
-            raise ValueError("Mapping input dimensions incompatible")
-        if mapping.dims_c != dims_c:
-            raise ValueError("Mapping condition dimensions incompatible")
-        self.mapping = mapping
-
-    def _forward(self, x, condition, **kwargs):
-        return self.mapping.inverse(x, condition, **kwargs)
-
-    def _inverse(self, z, condition, **kwargs):
-        return self.mapping.forward(z, condition, **kwargs)
-
-    def _log_det(self, x_or_z, condition=None, inverse=False, **kwargs):
-        return self.mapping.log_det(x_or_z, condition, not inverse, **kwargs)
-
-
-class ChainedMapping(Mapping):
-    def __init__(self, dims_in: int, dims_c: Optional[int], mappings: list[Mapping]):
-        super().__init__(dims_in, dims_c)
-        flattened_mappings = []
-        for m in mappings:
-            if dims_in != m.dims_in:
-                raise ValueError("Incompatible input dimension")
-            if m.dims_c is not None and dims_c != m.dims_c:
-                raise ValueError("Incompatible condition dimension")
-            if isinstance(m, ChainedMapping):
-                flattened_mappings.extend(m.mappings)
-            else:
-                flattened_mappings.append(m)
-        self.mappings = nn.ModuleList(flattened_mappings)
-
-    def _forward(self, x, condition, **kwargs):
-        log_jac_all = 0.0
-        for mapping in self.mappings:
-            x, log_jac = mapping.forward(x, condition, **kwargs)
-            log_jac_all += log_jac
-        return x, log_jac_all
-
-    def _inverse(self, z, condition, **kwargs):
-        log_jac_all = 0.0
-        for mapping in reversed(self.mappings):
-            z, log_jac = mapping.inverse(z, condition, **kwargs)
-            log_jac_all += log_jac
-        return z, log_jac_all
-
-    def _log_det(self, x_or_z, condition=None, inverse=False, **kwargs):
-        return sum(
-            mapping.log_det(x_or_z, condition, inverse, **kwargs)
-            for mapping in self.mappings
-        )

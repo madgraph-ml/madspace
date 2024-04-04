@@ -28,7 +28,7 @@ def kaellen(a: Tensor, b: Tensor, c: Tensor) -> Tensor:
     return a**2 + b**2 + c**2 - 2 * a * b - 2 * b * c - 2 * c * a
 
 
-def rotate_zy(p: Tensor, phi: Tensor, theta: Tensor) -> Tensor:
+def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     """Performs rotation around y- and z-axis:
 
         p -> p' = R_z(phi).R_y(theta).p
@@ -59,25 +59,26 @@ def rotate_zy(p: Tensor, phi: Tensor, theta: Tensor) -> Tensor:
     Args:
         p (Tensor): 4-momentum to rotate with shape=(b,4)
         phi (Tensor): rotation angle phi shape=(b,)
-        theta (torch.tensor): rotation angle theta shape=(b,)
+        costheta (torch.tensor): cosine of rotation angle theta shape=(b,)
 
     Returns:
         p' (Tensor): Rotated vector
     """
-
+    sintheta = sqrt(1 - costheta**2)
+    
     # Define the rotation
     q0 = p[:, 0]
     q1 = (
-        p[:, 1] * cos(theta) * cos(phi)
-        + p[:, 3] * sin(theta) * cos(phi)
+        p[:, 1] * costheta * cos(phi)
+        + p[:, 3] * sintheta * cos(phi)
         - p[:, 2] * sin(phi)
     )
     q2 = (
-        p[:, 1] * cos(theta) * sin(phi)
-        + p[:, 3] * sin(theta) * sin(phi)
+        p[:, 1] * costheta * sin(phi)
+        + p[:, 3] * sintheta * sin(phi)
         + p[:, 2] * cos(phi)
     )
-    q3 = p[:, 3] * cos(theta) - p[:, 1] * sin(theta)
+    q3 = p[:, 3] * costheta - p[:, 1] * sintheta
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
 

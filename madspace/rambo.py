@@ -6,7 +6,7 @@ import sys
 import torch
 import torch.functional as F
 
-from .base import PhaseSpaceMapping
+from .base import Mapping
 from .helper import (
     MINKOWSKI,
     map_fourvector_rambo,
@@ -17,10 +17,9 @@ from .helper import (
     newton,
     mass_func,
 )
-from .phasespace import massless_propogator
 
 
-class Rambo(PhaseSpaceMapping):
+class Rambo(Mapping):
     def __init__(self, e_cm, nparticles):
         self.e_cm = e_cm
         self.nparticles = nparticles
