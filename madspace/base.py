@@ -1,13 +1,13 @@
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional
 
 import torch
 from torch import Tensor
 import torch.nn as nn
 
-# Definition of InputTypes
-Shape = Tuple[int]
-ShapeList = List[Tuple[int]]
-TensorList = List[Tensor]
+# Definition of InputTypes and OutputTypes
+ShapeList = list[Tuple[int]]
+TensorList = list[Tensor]
+TensorTuple = Tuple[Tensor]
 
 
 class PhaseSpaceMapping(nn.Module):
@@ -26,31 +26,36 @@ class PhaseSpaceMapping(nn.Module):
 
     def __init__(
         self,
-        dims_r: Shape,
-        dims_p: Shape,
+        dims_in: ShapeList,
+        dims_out: ShapeList,
         dims_c: Optional[ShapeList] = None,
+        debug: bool = False,
     ):
         """
         Args:
-            dims_r (Shape): shape of the random numbers w/o batch dimension ``b``.
-            dims_p (Shape): shape of the input momenta w/o batch dimension ``b``.
+            dims_in (ShapeList): list of input shapes for the forward map w/o batch dimension ``b``.
+                Includes random numbers r and potential auxiliary inputs.
+            dims_out (ShapeList): list of output shapes as inputs for inverse map w/o batch dimension ``b``.
+                Usually only includes a sigle shape from the momentum tensor.
             dims_c (ShapeList, optional): list of shapes for the conditions. Defaults to None.
+            debug (bool, optional): check shapes of all inputs. Defaults to False.
         """
         super().__init__()
-        self.dims_r = dims_r
-        self.dims_p = dims_p
+        self.dims_in = dims_in
+        self.dims_out = dims_out
         self.dims_c = dims_c
+        self.debug = debug
 
     def _check_inputs(
         self,
-        r_or_p: Tensor,
+        inputs: TensorList,
         condition: Optional[TensorList] = None,
         inverse: bool = False,
     ) -> None:
         """Checks if inputs have the correct formats
 
         Args:
-            r_or_p (Tensor): input random numbers or momenta with shapes=(b, *dim_r/p)
+            inputs (TensorList): inputs for foward map or inverse map shapes dims_in and dims_out
             condition (TensorList, optional): conditional inputs with shapelist [shape_c1, shape_c2,...].
                 If None, the condition is ignored. Defaults to None.
             inverse (bool, optional): check inverse map. Defaults to False.
@@ -58,11 +63,20 @@ class PhaseSpaceMapping(nn.Module):
         Raises:
             ValueError: raises error when inputs do not have correct dimensions
         """
-        dims_in = self.dims_r if inverse else self.dims_p
-        if r_or_p.shape[1:] != self.dims_r:
-            raise ValueError(
-                f"Expected input shape {dims_in}, but got {tuple(r_or_p.shape[1:])}"
-            )
+        if not inverse:
+            dims_in_range = range(len(self.dims_in))
+            in_dim_list = list(tuple(inputs[i].shape[1:]) for i in dims_in_range)
+            if any(inputs[i].shape[1:] != self.dims_c[i] for i in dims_in_range):
+                raise ValueError(
+                    f"Expected input shape {self.dims_in}, but got {in_dim_list}"
+                )
+        else:
+            dims_out_range = range(len(self.dims_out))
+            out_dim_list = list(tuple(inputs[i].shape[1:]) for i in dims_out_range)
+            if any(inputs[i].shape[1:] != self.dims_c[i] for i in dims_out_range):
+                raise ValueError(
+                    f"Expected input shape {self.dims_out}, but got {out_dim_list}"
+                )
         if self.dims_c is None:
             return
         if condition is None:
@@ -74,36 +88,35 @@ class PhaseSpaceMapping(nn.Module):
                 raise ValueError(
                     f"Expected condition shape {self.dims_c}, got {cdim_list}"
                 )
-            if any(r_or_p.shape[0] != condition[i].shape[0] for i in dimc_range):
+            if any(inputs[i].shape[0] != condition[i].shape[0] for i in dimc_range):
                 raise ValueError(
                     "Number of input items must be equal to number of any condition item."
                 )
 
     def forward(
         self,
-        r: Tensor,
+        inputs: TensorList,
         condition: Optional[TensorList] = None,
         **kwargs,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tuple[TensorTuple, Tensor]:
         """
         Forward pass of the ps-mapping ``f``. This is the pass
         from the random numbers ``r` to the momenta ``p``, i.e.
             ..math::
                 f(r) = p.
-
         Args:
-            r (Tensor): random number input with shape=(b, *dim_r).
-            condition (TensorList, optional): conditional inputs with shapelist [shape_c1, shape_c2,...].
-                If None, the condition is ignored. Defaults to None.
+            inputs (TensorList): forward map inputs with shapes=[(b, *dims_in0), (b, *dims_in1),...].
+            condition (TensorList, optional): conditional inputs. Defaults to None.
 
         Returns:
-            p (Tensor): output momenta with shape=(b, *dims_p).
+            out (TensorTuple): tuple including momenta with shape=(b, *dims_out0).
             logdet (Tensor): the logdet of the mapping shape=(b,).
         """
-        self._check_inputs(r, condition)
-        return self._map(r, condition, **kwargs)
+        if self.debug:
+            self._check_inputs(inputs, condition)
+        return self._map(inputs, condition, **kwargs)
 
-    def _map(self, r, condition, **kwargs):
+    def _map(self, inputs, condition, **kwargs):
         """Should be overridden by all subclasses."""
         raise NotImplementedError(
             f"{self.__class__.__name__} does not provide _map(...) method"
@@ -111,10 +124,10 @@ class PhaseSpaceMapping(nn.Module):
 
     def inverse(
         self,
-        p: Tensor,
+        inputs: TensorList,
         condition: Optional[TensorList] = None,
         **kwargs,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tuple[TensorTuple, Tensor]:
 
         """
         Inverse pass ``f^{-1}`` of the ps-mapping. This is the pass
@@ -122,15 +135,16 @@ class PhaseSpaceMapping(nn.Module):
         ..math::
             f^{-1}(p) = r.
         Args:
-            p (Tensor) : input momenta with shape=(b, *dim_p).
-            condition (TensorList, optional): conditional inputs with shapelist [shape_c1, shape_c2,...].
-                If None, the condition is ignored. Defaults to None.
+            inputs (TensorList): input list including momenta with shape=(b, *dims_out0).
+            condition (TensorList, optional): conditional inputs. Defaults to None.
         Returns:
-            r (Tensor): randon numbers with shape=(b, *dim_r).
+            out (TensorTuple): tuple including randon numbers with shape=(b, *dims_in0)
+                and additional auxiliary tensors with shapelist=[(b, *dims_in1),..]
             logdet (Tensor): logdet of the mapping with shape=(b,).
         """
-        self._check_inputs(p, condition, inverse=True)
-        return self.map_inverse(p, condition, **kwargs)
+        if self.debug:
+            self._check_inputs(inputs, condition, inverse=True)
+        return self.map_inverse(inputs, condition, **kwargs)
 
     def _map_inverse(self, p, condition, **kwargs):
         """Should be overridden by all subclasses."""
@@ -140,7 +154,7 @@ class PhaseSpaceMapping(nn.Module):
 
     def log_det(
         self,
-        p_or_r: Tensor,
+        inputs: TensorList,
         condition: Optional[TensorList] = None,
         inverse: bool = False,
         **kwargs,
@@ -160,8 +174,9 @@ class PhaseSpaceMapping(nn.Module):
         Returns:
             log_det: Tensor of shape (b,).
         """
-        self._check_inputs(p_or_r, condition, inverse=inverse)
-        return self._call_log_det(p_or_r, condition, inverse, **kwargs)
+        if self.debug:
+            self._check_inputs(inputs, condition, inverse=inverse)
+        return self._call_log_det(inputs, condition, inverse, **kwargs)
 
     def _call_log_det(self, x, condition, inverse, **kwargs) -> Tensor:
         """Wrapper around _log_det."""
@@ -175,7 +190,7 @@ class PhaseSpaceMapping(nn.Module):
 
     def det(
         self,
-        p_or_r: Tensor,
+        inputs: TensorList,
         condition: Optional[TensorList] = None,
         inverse: bool = False,
         **kwargs,
@@ -194,13 +209,14 @@ class PhaseSpaceMapping(nn.Module):
         Returns:
             det: Tensor of shape (b,).
         """
-        self._check_inputs(p_or_r, condition, inverse=inverse)
-        return self._call_det(p_or_r, condition, inverse, **kwargs)
+        if self.debug:
+            self._check_inputs(inputs, condition, inverse=inverse)
+        return self._call_det(inputs, condition, inverse, **kwargs)
 
-    def _call_det(self, p_or_r, condition, inverse, **kwargs):
+    def _call_det(self, x, condition, inverse, **kwargs):
         """Wrapper around _det."""
         if hasattr(self, "_det"):
-            return self._det(p_or_r, condition, inverse, **kwargs)
+            return self._det(x, condition, inverse, **kwargs)
         if hasattr(self, "_log_det"):
-            return torch.exp(self._log_det(p_or_r, condition, inverse, **kwargs))
+            return torch.exp(self._log_det(x, condition, inverse, **kwargs))
         raise NotImplementedError("det is not implemented")
