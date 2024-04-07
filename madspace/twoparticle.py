@@ -1,33 +1,18 @@
 """ Implement two-particle mappings.
     Bases on the mappings described in
-    https://freidok.uni-freiburg.de/data/154629"""
+    [1] https://freidok.uni-freiburg.de/data/154629
+    [2] https://arxiv.org/abs/hep-ph/0008033
+"""
 
 
 from typing import Tuple, Optional
 import torch
-import math as m
-from torch import Tensor, sqrt, log, atan2, atan, tan
+from torch import Tensor, sqrt, log, atan2
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import kaellen, rotate_zy, boost, lsquare, edot, pi
+from .helper import two_particle_density, kaellen, rotate_zy, boost, lsquare, edot, pi
 
 TF_PI = torch.tensor(pi)
-
-
-def two_particle_density(s: Tensor, m1: Tensor, m2: Tensor) -> Tensor:
-    """Calculates the associated phase-space density
-    according to Eq. (C.8) - (C.10) in [1]
-
-    Args:s
-        s (Tensor): squared COM energy of the proces with shape=(b,)
-        m1 (Tensor): Mass of decay particle 1 with shape=()
-        m2 (Tensor): Mass of decay particle 2 with shape=()
-
-    Returns:
-        g (Tensor): returns the density with shape=(b,)
-    """
-    g = (2 * s) / sqrt(kaellen(s, m1**2, m2**2)) / TF_PI
-    return g
 
 
 class TwoParticleCOM(PhaseSpaceMapping):
@@ -51,17 +36,17 @@ class TwoParticleCOM(PhaseSpaceMapping):
         self.m1 = m1
         self.m2 = m2
 
-    def _map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs, condition=None):
         """Map from random numbers to momenta
 
         Args:
-            inputs (TensorList): list of two tensors [r, p0]
+            inputs: list of two tensors [r, s]
                 r: random numbers with shape=(b,2)
                 s: squared COM energy with shape=(b,)
 
         Returns:
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
-            logdet (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
         r, s = inputs[0], inputs[1]
@@ -85,13 +70,14 @@ class TwoParticleCOM(PhaseSpaceMapping):
         p1 = rotate_zy(p1, phi, costheta)
         p2[:, 1:] = -p1[:, 1:]
 
-        # get the log determinant and decay momenta
-        logdet = log(two_particle_density(s, self.m1, self.m2))
+        # get the density and decay momenta
+        # (C.10) in [2] == (C.8)/(4PI)
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
         p_decay = torch.stack([p1, p2], dim=1)
 
-        return (p_decay,), -logdet
+        return (p_decay,), 1 / gs
 
-    def _map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs, condition=None):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -100,6 +86,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
 
         Returns:
             r (Tensor): random numbers with shape=(b,2)
+            det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
         p_decay = inputs[0]
@@ -120,21 +107,22 @@ class TwoParticleCOM(PhaseSpaceMapping):
         r2 = (costheta + 1) / 2
         r = torch.stack([r1, r2], dim=1)
 
-        # get the log determinant
-        logdet = log(two_particle_density(s, self.m1, self.m2))
+        # get the density and decay momenta
+        # (C.10) in [2] == (C.8)/(4PI)
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
 
-        return (r, s), logdet
+        return (r, s), gs
 
-    def _log_det(
-        self,
-        inputs: TensorList,
-        condition: TensorList,
-        inverse: bool = False,
-    ):
+    def density(self, inputs, condition=False, inverse=False):
         del condition
-        s = inputs[1] if inverse else lsquare(inputs[0].sum(dim=1))
-        logdet = -log(two_particle_density(s, self.m1, self.m2))
-        return (-1) ** (inverse) * logdet
+        if inverse:
+            s = inputs[1]
+            gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
+            return gs
+
+        s = lsquare(inputs[0].sum(dim=1))
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
+        return 1 / gs
 
 
 class TwoParticleLAB(PhaseSpaceMapping):
@@ -149,11 +137,11 @@ class TwoParticleLAB(PhaseSpaceMapping):
         m1: Tensor,
         m2: Tensor,
     ):
-        super().__init__(dims_r=(2,), dims_p=(2, 4), dims_c=[(4,)])
+        super().__init__(dims_in=[(2,), (4,)], dims_out=[(2, 4)], dims_c=None)
         self.m1 = m1  # Mass of decay particle 1
         self.m2 = m2  # Mass of decay particle 2
 
-    def _map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs, condition=None):
         """Map from random numbers to momenta
 
         Args:
@@ -163,7 +151,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
 
         Returns:
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
-            logdet (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         r, p0 = inputs[0], inputs[1]
@@ -188,13 +176,13 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p1 = boost(p1, p0)
         p2 = p0 - p1
 
-        # get the log determinant and decay momenta
-        logdet = log(self._density(p0))
+        # get the density and decay momenta
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
         p_decay = torch.stack([p1, p2], dim=1)
 
-        return (p_decay,), -logdet
+        return (p_decay,), 1 / gs
 
-    def _map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs, condition=None):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -203,12 +191,14 @@ class TwoParticleLAB(PhaseSpaceMapping):
 
         Returns:
             r (Tensor): random numbers with shape=(b,2)
+            det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
         p_decay = inputs[0]
 
         # Decaying particle in lab-frame
         p0 = p_decay.sum(dim=1)
+        s = lsquare(p0)
         p1 = p_decay[:, 0]
 
         # Boost p1 into COM
@@ -226,21 +216,21 @@ class TwoParticleLAB(PhaseSpaceMapping):
         r2 = (costheta + 1) / 2
         r = torch.stack([r1, r2], dim=1)
 
-        # get the log determinant
-        logdet = log(self._density(p0))
+        # get the density
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
 
-        return (r, p0), logdet
+        return (r, p0), gs
 
-    def _log_det(
-        self,
-        inputs: TensorList,
-        condition: TensorList,
-        inverse: bool = False,
-    ):
+    def density(self, inputs, condition=False, inverse=False):
         del condition
-        s = lsquare(inputs[1]) if inverse else lsquare(inputs[0].sum(dim=1))
-        logdet = -log(two_particle_density(s, self.m1, self.m2))
-        return (-1) ** (inverse) * logdet
+        if inverse:
+            s = lsquare(inputs[1])
+            gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
+            return gs
+
+        s = lsquare(inputs[0].sum(dim=1))
+        gs = two_particle_density(s, self.m1, self.m2) / (4 * TF_PI)
+        return 1 / gs
 
 
 class tChannelTwoParticle(PhaseSpaceMapping):
@@ -271,8 +261,11 @@ class tChannelTwoParticle(PhaseSpaceMapping):
         # else:
         #     self.t_map = sChannelBWBlock(mass=mt, width=wt)
 
-    def _map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs, condition=None):
         raise NotImplementedError
 
-    def _map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs, condition=None):
         raise NotImplementedError
+    
+    def density(self, inputs, condition= None, inverse=False):
+        return NotImplementedError

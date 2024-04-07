@@ -11,6 +11,20 @@ ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
 
+def two_particle_density(s: Tensor, m1: Tensor, m2: Tensor) -> Tensor:
+    """Calculates the associated phase-space density
+    according to Eq. (C.8) in [1]
+
+    Args:
+        s (Tensor): squared COM energy of the proces with shape=(b,)
+        m1 (Tensor): Mass of decay particle 1 with shape=()
+        m2 (Tensor): Mass of decay particle 2 with shape=()
+
+    Returns:
+        g (Tensor): returns the density with shape=(b,)
+    """
+    g = (8 * s) / sqrt(kaellen(s, m1**2, m2**2))
+    return g
 
 def kaellen(a: Tensor, b: Tensor, c: Tensor) -> Tensor:
     """Definition of the standard kaellen function [1]
