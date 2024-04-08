@@ -11,20 +11,38 @@ ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
 
+
 def two_particle_density(s: Tensor, m1: Tensor, m2: Tensor) -> Tensor:
     """Calculates the associated phase-space density
     according to Eq. (C.8) in [1]
 
     Args:
         s (Tensor): squared COM energy of the proces with shape=(b,)
-        m1 (Tensor): Mass of decay particle 1 with shape=()
-        m2 (Tensor): Mass of decay particle 2 with shape=()
+        m1 (Tensor): Mass of decay particle 1 with shape=(b,)
+        m2 (Tensor): Mass of decay particle 2 with shape=(b,)
 
     Returns:
         g (Tensor): returns the density with shape=(b,)
     """
     g = (8 * s) / sqrt(kaellen(s, m1**2, m2**2))
     return g
+
+
+def tinv_two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
+    """Calculates the associated phase-space density
+    according to Eq. (C.22) in [1]
+
+    Args:
+        s (Tensor): squared COM energy of the proces with shape=(b,)
+        p1_2 (Tensor): Virtuality of incoming particle 1 with shape=(b,)
+        p2_2 (Tensor): Virtuality of incoming particle 2 with shape=(b,)
+
+    Returns:
+        g (Tensor): returns the density with shape=(b,)
+    """
+    g = 4 * sqrt(kaellen(s, p1_2, p2_2))
+    return g
+
 
 def kaellen(a: Tensor, b: Tensor, c: Tensor) -> Tensor:
     """Definition of the standard kaellen function [1]
@@ -79,7 +97,7 @@ def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
         p' (Tensor): Rotated vector
     """
     sintheta = sqrt(1 - costheta**2)
-    
+
     # Define the rotation
     q0 = p[:, 0]
     q1 = (
@@ -93,6 +111,38 @@ def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
         + p[:, 2] * cos(phi)
     )
     q3 = p[:, 3] * costheta - p[:, 1] * sintheta
+
+    return torch.stack((q0, q1, q2, q3), dim=-1)
+
+
+def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
+    """Performs inverse rotation around y- and z-axis:
+
+        p' -> p = R_y(-theta).R_z(-phi).p
+
+    Args:
+        p (Tensor): rotated 4-momentum inverse with shape=(b,4)
+        phi (Tensor): rotation angle phi shape=(b,)
+        costheta (torch.tensor): cosine of rotation angle theta shape=(b,)
+
+    Returns:
+        p' (Tensor): Rotated vector
+    """
+    sintheta = sqrt(1 - costheta**2)
+
+    # Define the rotation
+    q0 = p[:, 0]
+    q1 = (
+        p[:, 1] * costheta * cos(phi)
+        + p[:, 2] * costheta * sin(phi)
+        - p[:, 3] * sintheta
+    )
+    q2 = p[:, 2] * cos(phi) - p[:, 1] * sin(phi)
+    q3 = (
+        p[:, 3] * costheta
+        + p[:, 1] * sintheta * cos(phi)
+        + p[:, 2] * sintheta * sin(phi)
+    )
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
 

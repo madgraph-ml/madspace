@@ -33,6 +33,7 @@ class UniformInvariantBlock(_Invariants):
     """Implements uniform sampling of invariants"""
 
     def __init__(self):
+        """see parent docstring"""
         super().__init__()
 
     def map(self, inputs, condition):
