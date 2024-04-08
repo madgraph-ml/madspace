@@ -69,12 +69,14 @@ def stable_propagator_nu_is_one(
     mass: Tensor,
     s_min: Tensor,
     s_max: Tensor,
+    nu: float = 1.0,
     inverse: bool = False,
 ) -> Tuple[Tensor, Tuple[Tensor]]:
     """Performs mapping for vanishing widths propagators
     \propto 1/(s-m)^2 described in (C.5) in [2].
     """
     # define common variables
+    del nu
     m2 = mass**2
     q_max = s_max - m2
     q_min = s_min - m2
@@ -93,6 +95,7 @@ def massles_propagator_nu_is_one(
     r_or_s: Tensor,
     s_min: Tensor,
     s_max: Tensor,
+    nu: float = 1.0,
     inverse: bool = False,
 ) -> Tuple[Tensor, Tuple[Tensor]]:
     # define common variables
@@ -101,6 +104,7 @@ def massles_propagator_nu_is_one(
     Uses a negative m^2 = -a to avoid instabilities
     with a = -1e-8 as mentioned in [3]
     """
+    del nu
     m2 = -1e-8
     q_max = s_max - m2
     q_min = s_min - m2

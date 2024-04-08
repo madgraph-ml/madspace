@@ -11,6 +11,11 @@ from torch import Tensor, sqrt, log, atan2
 
 from .base import PhaseSpaceMapping, TensorList
 from .helper import two_particle_density, kaellen, rotate_zy, boost, lsquare, edot, pi
+from .propagators import (
+    breit_wigner_propagator,
+    massles_propagator_nu_is_one,
+    massless_propagator_nu_is_not_one,
+)
 
 TF_PI = torch.tensor(pi)
 
@@ -254,18 +259,18 @@ class tChannelTwoParticle(PhaseSpaceMapping):
         self.m2 = m2  # Mass of decay particle 2
 
         # # TODO make limits smin and smax inputs of mapping and not fixedß
-        # if mt is None:
-        #     self.t_map = sChannelMasslessBlock(nu=2.0)
-        # elif wt is None:
-        #     self.t_map = sChannelZeroWidthBlock(nu=2.0, mass=mt)
-        # else:
-        #     self.t_map = sChannelBWBlock(mass=mt, width=wt)
+        if mt is None:
+            self.t_map = sChannelMasslessBlock(nu=2.0)
+        elif wt is None:
+            self.t_map = sChannelZeroWidthBlock(nu=2.0, mass=mt)
+        else:
+            self.t_map = sChannelBWBlock(mass=mt, width=wt)
 
     def map(self, inputs, condition=None):
         raise NotImplementedError
 
     def map_inverse(self, inputs, condition=None):
         raise NotImplementedError
-    
-    def density(self, inputs, condition= None, inverse=False):
+
+    def density(self, inputs, condition=None, inverse=False):
         return NotImplementedError
