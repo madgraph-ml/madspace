@@ -6,7 +6,7 @@ from torch import Tensor, cos, sin, cosh, sinh, sqrt, log
 from math import pi
 
 
-MINKOWSKI = torch.diag([1.0, -1.0, -1.0, -1.0])
+MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
@@ -89,9 +89,9 @@ def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     [2] https://en.wikipedia.org/wiki/Spherical_coordinate_system
 
     Args:
-        p (Tensor): 4-momentum to rotate with shape=(b,4)
-        phi (Tensor): rotation angle phi shape=(b,)
-        costheta (torch.tensor): cosine of rotation angle theta shape=(b,)
+        p (Tensor): 4-momentum to rotate with shape=(b,...,4)
+        phi (Tensor): rotation angle phi shape=(b,...)
+        costheta (torch.tensor): cosine of rotation angle theta shape=(b,...)
 
     Returns:
         p' (Tensor): Rotated vector
@@ -99,18 +99,18 @@ def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     sintheta = sqrt(1 - costheta**2)
 
     # Define the rotation
-    q0 = p[:, 0]
+    q0 = p[..., 0]
     q1 = (
-        p[:, 1] * costheta * cos(phi)
-        + p[:, 3] * sintheta * cos(phi)
-        - p[:, 2] * sin(phi)
+        p[..., 1] * costheta * cos(phi)
+        + p[..., 3] * sintheta * cos(phi)
+        - p[..., 2] * sin(phi)
     )
     q2 = (
-        p[:, 1] * costheta * sin(phi)
-        + p[:, 3] * sintheta * sin(phi)
-        + p[:, 2] * cos(phi)
+        p[..., 1] * costheta * sin(phi)
+        + p[..., 3] * sintheta * sin(phi)
+        + p[..., 2] * cos(phi)
     )
-    q3 = p[:, 3] * costheta - p[:, 1] * sintheta
+    q3 = p[..., 3] * costheta - p[:, 1] * sintheta
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
 
@@ -121,9 +121,9 @@ def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
         p' -> p = R_y(-theta).R_z(-phi).p
 
     Args:
-        p (Tensor): rotated 4-momentum inverse with shape=(b,4)
-        phi (Tensor): rotation angle phi shape=(b,)
-        costheta (torch.tensor): cosine of rotation angle theta shape=(b,)
+        p (Tensor): rotated 4-momentum inverse with shape=(b,...,4)
+        phi (Tensor): rotation angle phi shape=(b,...)
+        costheta (torch.tensor): cosine of rotation angle theta shape=(b,...)
 
     Returns:
         p' (Tensor): Rotated vector
@@ -131,17 +131,17 @@ def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     sintheta = sqrt(1 - costheta**2)
 
     # Define the rotation
-    q0 = p[:, 0]
+    q0 = p[..., 0]
     q1 = (
-        p[:, 1] * costheta * cos(phi)
-        + p[:, 2] * costheta * sin(phi)
-        - p[:, 3] * sintheta
+        p[..., 1] * costheta * cos(phi)
+        + p[..., 2] * costheta * sin(phi)
+        - p[..., 3] * sintheta
     )
-    q2 = p[:, 2] * cos(phi) - p[:, 1] * sin(phi)
+    q2 = p[..., 2] * cos(phi) - p[:, 1] * sin(phi)
     q3 = (
-        p[:, 3] * costheta
-        + p[:, 1] * sintheta * cos(phi)
-        + p[:, 2] * sintheta * sin(phi)
+        p[..., 3] * costheta
+        + p[..., 1] * sintheta * cos(phi)
+        + p[..., 2] * sintheta * sin(phi)
     )
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
@@ -152,12 +152,12 @@ def lsquare(a: Tensor) -> Tensor:
     the Mikowski metric (1.0, -1.0, -1.0, -1.0)
 
     Args:
-        a (Tensor): 4-vector with shape shape=(b,4)
+        a (Tensor): 4-vector with shape shape=(b,...,4)
 
     Returns:
-        Tensor: Lorentzscalar with shape=(b,)
+        Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("bd,dd,bd->b", a, MINKOWSKI, a)
+    return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
@@ -165,13 +165,13 @@ def ldot(a: Tensor, b: Tensor) -> Tensor:
     the Mikowski metric (1.0, -1.0, -1.0, -1.0)
 
     Args:
-        a (Tensor): 4-vector with shape shape=(b,4)
-        b (Tensor): 4-vector with shape shape=(b,4)
+        a (Tensor): 4-vector with shape shape=(b,...,4)
+        b (Tensor): 4-vector with shape shape=(b,...,4)
 
     Returns:
-        Tensor: Lorentzscalar with shape=(b,)
+        Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("bd,dd,bd->b", a, MINKOWSKI, b)
+    return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, b)
 
 
 def edot(a: Tensor, b: Tensor) -> Tensor:
@@ -179,13 +179,13 @@ def edot(a: Tensor, b: Tensor) -> Tensor:
     the Euclidean metric
 
     Args:
-        a (Tensor): 4-vector with shape=(b,4)
-        b (Tensor): 4-vector with shape=(b,4)
+        a (Tensor): 4-vector with shape=(b,...,4)
+        b (Tensor): 4-vector with shape=(b,...,4)
 
     Returns:
-        Tensor: Lorentzscalar with shape=(b,)
+        Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("bd,bd->b", a, b)
+    return torch.einsum("...d,...d->...", a, b)
 
 
 def boost(k: Tensor, p_boost: Tensor) -> Tensor:
@@ -198,22 +198,22 @@ def boost(k: Tensor, p_boost: Tensor) -> Tensor:
         k' -> k  = boost(k', k) = (E, px, py, pz)
 
     Args:
-        k (Tensor): input vector with shape (b,4)
-        p_boost (Tensor): boosting vector with shape (b,4)
+        k (Tensor): input vector with shape=(b,n,4)/(b,4)
+        p_boost (Tensor): boosting vector with shape=(b,1,4)/(b,4)
 
     Returns:
-        k' (Tensor): boosted vector with shape (b,4)
+        k' (Tensor): boosted vector with shape=(b,n,4)/(b,4)
     """
     # Make sure energy is > 0 even after momentum flip (for inverse boost)
-    p_boost[:, 0] = torch.abs(p_boost[:, 0])
+    p_boost[..., 0] = torch.abs(p_boost[..., 0])
 
     # Perform the boost
     rsq = sqrt(lsquare(p_boost))
     k0 = edot(k, p_boost) / rsq
-    c1 = (k[:, 0] + k0) / (rsq + p_boost[:, 0])
-    k1 = k[:, 1] + c1 * p_boost[:, 1]
-    k2 = k[:, 2] + c1 * p_boost[:, 2]
-    k3 = k[:, 3] + c1 * p_boost[:, 3]
+    c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
+    k1 = k[..., 1] + c1 * p_boost[..., 1]
+    k2 = k[..., 2] + c1 * p_boost[..., 2]
+    k3 = k[..., 3] + c1 * p_boost[..., 3]
 
     return torch.stack((k0, k1, k2, k3), dim=-1)
 
@@ -226,8 +226,8 @@ def boost_beam(
     """Boosts q along the beam axis with given rapidity
 
     Args:
-        q (Tensor): input vector with shape=(b,n,4)
-        rapidity (Tensor): boosting parameter with shape=(b,1,1)
+        q (Tensor): input vector with shape=(b,n,4)/(b,4)
+        rapidity (Tensor): boosting parameter with shape=(b,1,1)/(b,1)
         inverse (bool, optional): inverse boost. Defaults to False.
 
     Returns:
@@ -235,12 +235,12 @@ def boost_beam(
     """
     sign = -1.0 if inverse else 1.0
 
-    pi0 = q[:, :, 0] * cosh(rapidity) + sign * q[:, :, 3] * sinh(rapidity)
-    pix = q[:, :, 1]
-    piy = q[:, :, 2]
-    piz = q[:, :, 3] * cosh(rapidity) + sign * q[:, :, 0] * sinh(rapidity)
+    pi0 = q[..., 0] * cosh(rapidity) + sign * q[..., 3] * sinh(rapidity)
+    pix = q[..., 1]
+    piy = q[..., 2]
+    piz = q[..., 3] * cosh(rapidity) + sign * q[..., 0] * sinh(rapidity)
 
-    return torch.stack((pi0, pix, piy, piz), axis=-1)
+    return torch.stack((pi0, pix, piy, piz), dim=-1)
 
 
 def map_fourvector_rambo(r: Tensor) -> Tensor:
