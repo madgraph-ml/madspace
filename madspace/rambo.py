@@ -1,10 +1,12 @@
 import numpy as np
 from typing import Optional, Tuple
-from scipy.optimize import brentq
 from math import gamma, pi
 import torch
 from torch import Tensor, cos, sin, cosh, sinh, sqrt, log
 import torch.functional as F
+
+from .rootfinder.roots import get_u_parameter, get_xi_parameter
+
 
 from .base import PhaseSpaceMapping
 from .helper import (
@@ -13,8 +15,6 @@ from .helper import (
     two_body_decay_factor,
     boost,
     boost_beam,
-    rambo_func,
-    newton,
     mass_func,
     lsquare,
 )
@@ -78,13 +78,10 @@ class Rambo(PhaseSpaceMapping):
             m = self.masses[None,...]
 
             # solve for xi in massive case, see Ref. [1]
-            xi = torch.empty((r.shape[0], 1, 1))
-            func = lambda x: mass_func(x, p, m, self.e_cm)
-            df = lambda x: mass_func(x, p, m, self.e_cm, diff=True)
-            guess = 0.5 * torch.ones((r.shape[0],))
-            xi[:, 0, 0] = newton(func, df, 0.0, 1.0, guess)
+            xi = get_xi_parameter(p, m)
             
-            # Make them massive
+            # Make momenta massive
+            xi = xi[:, None, None]
             k = torch.ones_like(p)
             k[:, :, 0] = torch.sqrt(m**2 + xi[:, :, 0] ** 2 * p[:, :, 0] ** 2)
             k[:, :, 1:] = xi * p[:, :, 1:]

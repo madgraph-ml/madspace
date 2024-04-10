@@ -9,7 +9,7 @@ requirements = ["numpy", "pandas", "scipy", "tables", "torch", "torchtestcase", 
 
 setup(
     name="madspace",
-    version="0.1.0",
+    version="0.2.0",
     author="Ramon Winterhalder, Theo Heimel",
     author_email="ramon.winterhalder@uclouvain.be",
     description="Differentiable and GPU ready phase-space mappings",

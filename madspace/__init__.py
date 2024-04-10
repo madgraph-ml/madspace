@@ -12,6 +12,3 @@ Modules to construct differentiable and GPU-ready
 phase-space mappings susing PyTorch.
 
 """
-from . import mappings
-
-__all__ = ["distributions", "mappings", "models", "plotting", "training"]
