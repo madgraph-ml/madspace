@@ -10,7 +10,7 @@ from .rambo_functions import (
 )
 
 
-class _RootFinderPolynomial(torch.autograd.Function):
+class RootFinderPolynomial(torch.autograd.Function):
     """
     Custom autograd for our numeric rootfinder which should not loop
     over the iterations in the forward pass.
@@ -45,7 +45,7 @@ class _RootFinderPolynomial(torch.autograd.Function):
         return grad_output / drdu
 
 
-class _RootFinderMass(torch.autograd.Function):
+class RootFinderMass(torch.autograd.Function):
     """
     Custom autograd for our numeric rootfinder which should not loop
     over the iterations in the forward pass.

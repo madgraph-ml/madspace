@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from .methods import newton
 from typing import Mapping, Callable, Union, Dict, List
-from .autograd import _RootFinderPolynomial, _RootFinderMass
+from .autograd import RootFinderPolynomial, RootFinderMass
 
 
 def get_u_parameter(xs: Tensor) -> Tensor:
@@ -18,7 +18,7 @@ def get_u_parameter(xs: Tensor) -> Tensor:
     Returns:
         u_i (Tensor): solution with shape=(b, nparticles - 2)
     """
-    return _RootFinderPolynomial.apply(xs)
+    return RootFinderPolynomial.apply(xs)
 
 def get_xi_parameter(p0: Tensor, mass: Tensor) -> Tensor:
     """Returns the solution of the equation
@@ -32,4 +32,4 @@ def get_xi_parameter(p0: Tensor, mass: Tensor) -> Tensor:
     Returns:
         xi (Tensor): scaling parameter with shape=(b,)
     """
-    return _RootFinderMass.apply(p0, mass)
+    return RootFinderMass.apply(p0, mass)
