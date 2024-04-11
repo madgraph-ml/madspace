@@ -8,7 +8,7 @@ import torch.functional as F
 from .rootfinder.roots import get_u_parameter, get_xi_parameter
 
 
-from .base import PhaseSpaceMapping
+from .base import PhaseSpaceMapping, TensorList
 from .helper import (
     MINKOWSKI,
     map_fourvector_rambo,
@@ -23,36 +23,40 @@ class Rambo(PhaseSpaceMapping):
     """Rambo algorithm as presented in
     [1] Rambo [Comput. Phys. Commun. 40 (1986) 359-373]
 
-
+    Note: we make ``e_cm`` an input instead of a fixed initialization
+          parameter to make it compatible for event sampling
+          for hadron colliders.
     """
 
     def __init__(
         self,
-        e_cm: float,
         nparticles: int,
         masses: list[float] = None,
     ):
         self.n_particles = nparticles
-        self.e_cm = e_cm
 
         if masses is not None:
             self.masses = torch.tensor(masses)
             assert len(self.masses) == self.n_particles
-            e_min = sum(masses)
+            self.e_min = sum(masses)
         else:
             self.masses = masses
-            e_min = 0.0
-
-        if not self.e_cm >= e_min:
-            raise ValueError(f"COM energy needs to be larger than sum of external")
+            self.e_min = 0.0
 
         dims_in = [(nparticles, 4)]
         dims_out = [(nparticles, 4)]
         super().__init__(dims_in, dims_out)
 
-    def map(self, inputs, condition=None):
+    def map(self, inputs: TensorList, condition: TensorList = None):
         del condition
-        r = inputs[0]  # have dims (b,n,4)
+        r = inputs[0]  # has dims (b,n,4)
+        e_cm = inputs[1]  # has dims (b,) or ()
+
+        with torch.no_grad():
+            if torch.any(e_cm <= self.e_min):
+                raise ValueError(
+                    f"partonic COM energy needs to be larger than sum of external masses!"
+                )
 
         # Construct intermediate particle momenta
         q = map_fourvector_rambo(r)
@@ -62,15 +66,14 @@ class Rambo(PhaseSpaceMapping):
 
         # Get scaling factor and match dimensions
         M = sqrt(lsquare(Q))  # has shape (b,1)
-        M2 = M[..., None]
-        x = self.e_cm / M2  # has shape (b,1,1)
+        x = e_cm / M  # has shape (b,1)
 
         # Boost and refactor
         p = boost(q, Q, inverse=True)
-        p = x * p
+        p = x[..., None] * p
 
-        w0 = torch.ones((r.shape[0],))
-        gs = w0 * self._massles_weight()
+        torch_ones = torch.ones((r.shape[0],))
+        w0 = torch_ones * self._massles_weight(e_cm)
 
         if self.masses is not None:
             # match dimensions of masses
@@ -88,18 +91,18 @@ class Rambo(PhaseSpaceMapping):
             # Get massive density
             w_m = self._massive_weight(k, p, xi[:, 0, 0])
 
-            return (k,), w_m * gs
+            return (k,), w_m * w0
 
-        return (p,), gs
+        return (p,), w0
 
     def map_inverse(self, inputs, condition=None):
         """Does not exist for Rambo"""
         raise NotImplementedError
 
-    def _massles_weight(self):
+    def _massles_weight(self, e_cm):
         w0 = (
             (pi / 2.0) ** (self.n_particles - 1)
-            * self.e_cm ** (2 * self.n_particles - 4)
+            * e_cm ** (2 * self.n_particles - 4)
             / (gamma(self.n_particles) * gamma(self.n_particles - 1))
         )
         return w0

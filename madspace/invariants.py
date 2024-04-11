@@ -6,7 +6,7 @@
 
 
 from torch import Tensor
-from .base import PhaseSpaceMapping
+from .base import PhaseSpaceMapping, TensorList
 from .functional.propagators import (
     uniform_propagator,
     breit_wigner_propagator,
@@ -36,20 +36,20 @@ class UniformInvariantBlock(_Invariants):
         """see parent docstring"""
         super().__init__()
 
-    def map(self, inputs, condition):
+    def map(self, inputs: TensorList, condition: TensorList):
         r = inputs[0]
         smin, smax = condition[0], condition[1]
         s, det = uniform_propagator(r, smin, smax)
         return (s,), det
 
-    def map_inverse(self, inputs, condition):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         s = inputs[0]
         smin, smax = condition[0], condition[1]
         r, det = uniform_propagator(s, smin, smax, inverse=True)
         return (r,), det
 
-    def density(self, inputs, condition, inverse=False):
+    def density(self, inputs: TensorList, condition: TensorList, inverse=False):
         """Inverse map from s onto random number"""
         del inputs
         smin, smax = condition[0], condition[1]
@@ -79,14 +79,14 @@ class BreitWignerInvariantBlock(_Invariants):
         self.mass = mass
         self.width = width
 
-    def map(self, inputs, condition):
+    def map(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         r = inputs[0]
         smin, smax = condition[0], condition[1]
         s, det = breit_wigner_propagator(r, self.mass, self.width, smin, smax)
         return (s,), det
 
-    def map_inverse(self, inputs, condition):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         s = inputs[0]
         smin, smax = condition[0], condition[1]
@@ -100,7 +100,7 @@ class BreitWignerInvariantBlock(_Invariants):
         )
         return (r,), det
 
-    def density(self, inputs, condition, inverse=False):
+    def density(self, inputs: TensorList, condition: TensorList, inverse=False):
         """Inverse map from s onto random number"""
         smin, smax = condition[0], condition[1]
         _, det = breit_wigner_propagator(
@@ -140,21 +140,21 @@ class StableInvariantBlock(_Invariants):
         else:
             self.prop_function = stable_propagator_nu_is_not_one
 
-    def map(self, inputs, condition):
+    def map(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         r = inputs[0]
         smin, smax = condition[0], condition[1]
         s, det = self.prop_function(r, self.mass, smin, smax, self.nu)
         return (s,), det
 
-    def map_inverse(self, inputs, condition):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         s = inputs[0]
         smin, smax = condition[0], condition[1]
         r, det = self.prop_function(s, self.mass, smin, smax, self.nu, inverse=True)
         return (r,), det
 
-    def density(self, inputs, condition, inverse=False):
+    def density(self, inputs: TensorList, condition: TensorList, inverse=False):
         """Inverse map from s onto random number"""
         smin, smax = condition[0], condition[1]
         _, det = self.prop_function(
@@ -186,21 +186,21 @@ class MasslessInvariantBlock(_Invariants):
         else:
             self.prop_function = massless_propagator_nu_is_not_one
 
-    def map(self, inputs, condition):
+    def map(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         r = inputs[0]
         smin, smax = condition[0], condition[1]
         s, det = self.prop_function(r, smin, smax, self.nu)
         return (s,), det
 
-    def map_inverse(self, inputs, condition):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
         s = inputs[0]
         smin, smax = condition[0], condition[1]
         r, det = self.prop_function(s, smin, smax, self.nu, inverse=True)
         return (r,), det
 
-    def density(self, inputs, condition, inverse=False):
+    def density(self, inputs: TensorList, condition: TensorList, inverse=False):
         """Inverse map from s onto random number"""
         smin, smax = condition[0], condition[1]
         _, det = self.prop_function(inputs[0], smin, smax, self.nu, inverse=inverse)

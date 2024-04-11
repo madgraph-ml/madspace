@@ -18,7 +18,7 @@ def uniform_propagator(
     s_min: Tensor,
     s_max: Tensor,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     """
     Implements uniform sampling of invariants as described
     in Eq.(2.2.7) in [2]
@@ -43,7 +43,7 @@ def breit_wigner_propagator(
     s_min: Tensor,
     s_max: Tensor,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     """Performs the Breit-Wigner mapping as described
     in (C.6) & (C.7) in [2]
     """
@@ -71,7 +71,7 @@ def stable_propagator_nu_is_one(
     s_max: Tensor,
     nu: float = 1.0,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     """Performs mapping for vanishing widths propagators
     \propto 1/(s-m)^2 described in (C.5) in [2].
     """
@@ -97,7 +97,7 @@ def massles_propagator_nu_is_one(
     s_max: Tensor,
     nu: float = 1.0,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     # define common variables
     """Performs mapping for massless propagators
     \propto 1/s^2 described in (C.5) in [2].
@@ -126,7 +126,7 @@ def stable_propagator_nu_is_not_one(
     s_max: Tensor,
     nu: float = 1.4,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     """Performs mapping for vanishing widths propagators
     \propto 1/(s-m)^2 described in (C.4) in [2].
     """
@@ -155,7 +155,7 @@ def massless_propagator_nu_is_not_one(
     s_max: Tensor,
     nu: float = 1.4,
     inverse: bool = False,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tuple[Tensor, Tensor]:
     """Performs mapping for massless propagators
     \propto 1/s^2 described in (C.4) in [2].
     Uses a negative m^2 = -a to avoid instabilities

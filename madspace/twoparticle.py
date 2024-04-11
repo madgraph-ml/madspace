@@ -30,7 +30,6 @@ from .invariants import (
 )
 
 
-
 class TwoParticleCOM(PhaseSpaceMapping):
     """
     Implement isotropic 2-particle phase-space, based on the mapping described in
@@ -52,7 +51,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
         self.m1 = m1
         self.m2 = m2
 
-    def map(self, inputs, condition=None):
+    def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
         Args:
@@ -93,7 +92,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
 
         return (p_decay,), 1 / gs
 
-    def map_inverse(self, inputs, condition=None):
+    def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -129,7 +128,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
 
         return (r, s), gs
 
-    def density(self, inputs, condition=False, inverse=False):
+    def density(self, inputs: TensorList, condition=None, inverse=False):
         del condition
         if inverse:
             s = inputs[1]
@@ -157,7 +156,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         self.m1 = m1  # Mass of decay particle 1
         self.m2 = m2  # Mass of decay particle 2
 
-    def map(self, inputs, condition=None):
+    def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
         Args:
@@ -173,8 +172,10 @@ class TwoParticleLAB(PhaseSpaceMapping):
         r, p0 = inputs[0], inputs[1]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
-        if torch.any(s < 0):
-            raise ValueError(f"s needs to be always positive")
+
+        with torch.no_grad():
+            if torch.any(s < 0):
+                raise ValueError(f"s needs to be always positive")
 
         r1, r2 = r[:, 0], r[:, 1]
 
@@ -197,7 +198,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
 
         return (p_decay,), 1 / gs
 
-    def map_inverse(self, inputs, condition=None):
+    def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -217,7 +218,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p1 = p_decay[:, 0]
 
         # Boost p1 into COM
-        p1 = boost(p1, -p0)
+        p1 = boost(p1, p0, inverse=True)
 
         # get p1 absolute momentum
         p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))
@@ -236,7 +237,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
 
         return (r, p0), gs
 
-    def density(self, inputs, condition=False, inverse=False):
+    def density(self, inputs: TensorList, condition=None, inverse=False):
         del condition
         if inverse:
             s = lsquare(inputs[1])
@@ -279,7 +280,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         else:
             self.t_map = BreitWignerInvariantBlock(mass=mt, width=wt)
 
-    def map(self, inputs, condition=None):
+    def map(self, inputs: TensorList, condition=None):
         del condition
         r, p_in, m_out = inputs[0], inputs[1], inputs[2]
 
@@ -332,7 +333,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
 
         return (p_out, q2_in, angles_in), gs_inv / gp
 
-    def map_inverse(self, inputs, condition=None):
+    def map_inverse(self, inputs: TensorList, condition=None):
         del condition
         p_out, q2_in, angles_in = inputs[0]
 
@@ -387,7 +388,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
 
         return (r, p_in, m_out), gs_inv * gp
 
-    def density(self, inputs, condition=None, inverse=False):
+    def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""
         if inverse:
             _, density = self.map_inverse(inputs, condition)
@@ -417,7 +418,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         )
 
         # Define which t-mapping is used
-        # MadGraph only uses flat mappings for t? (Check with Olivio)
+        # MadGraph only uses flat mappings for t!
         if flat:
             self.t_map = UniformInvariantBlock()
         elif mt is None:
@@ -427,7 +428,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         else:
             self.t_map = BreitWignerInvariantBlock(mass=mt, width=wt)
 
-    def map(self, inputs, condition=None):
+    def map(self, inputs: TensorList, condition=None):
         del condition
         r, p_in, m_out = inputs[0], inputs[1], inputs[2]
 
@@ -436,7 +437,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         ptot = p_in.sum(dim=1)
         p1 = p_in[:, 0]
         p2 = p_in[:, 1]
-        p1_com = boost(p1, -ptot)
+        p1_com = boost(p1, ptot, inverse=True)
 
         # get invariants and incoming virtualities
         p1_2 = lsquare(p1)
@@ -482,7 +483,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
         return (p_out, q2_in, angles_in), gs_inv / gp
 
-    def map_inverse(self, inputs, condition=None):
+    def map_inverse(self, inputs: TensorList, condition=None):
         del condition
         p_out, q2_in, angles_in = inputs[0]
 
@@ -511,9 +512,9 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         p1 = boost(p1, ptot)
         p2 = ptot - p1
 
-        # get rotate away angles from incoming momenta
+        # boost inverse, rotate back
         # and then extract phi and theta
-        k1 = boost(p1, -ptot)
+        k1 = boost(p1, ptot, inverse=True)
         k1 = inv_rotate_zy(k1, phi1, costheta1)
         k1mag = sqrt(edot(k1[:, 1:], k1[:, 1:]))
         costheta = k1[:, 3] / k1mag
@@ -537,7 +538,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
         return (r, p_in, m_out), gs_inv * gp
 
-    def density(self, inputs, condition=None, inverse=False):
+    def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""
         if inverse:
             _, density = self.map_inverse(inputs, condition)

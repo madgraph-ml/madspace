@@ -49,7 +49,7 @@ class PhaseSpaceMapping(nn.Module):
         condition: Optional[TensorList] = None,
         inverse=False,
         **kwargs,
-    ) -> Tuple[TensorTuple, Tensor, Tensor]:
+    ) -> Tuple[TensorTuple, Tensor]:
         """
         Forward pass of the ps-mapping ``f``. This is the pass
         from the random numbers ``r` to the momenta ``p``, i.e.
@@ -69,7 +69,7 @@ class PhaseSpaceMapping(nn.Module):
             density (Tensor): the density (det) of the mapping with shape=(b,).
         """
         if inverse:
-            self.map_inverse(inputs, condition, **kwargs)
+            return self.map_inverse(inputs, condition, **kwargs)
         return self.map(inputs, condition, **kwargs)
 
     def map(
