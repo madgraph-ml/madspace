@@ -62,10 +62,11 @@ class Rambo(PhaseSpaceMapping):
 
         # Get scaling factor and match dimensions
         M = sqrt(lsquare(Q))  # has shape (b,1)
-        x = self.e_cm / M[..., None]  # has shape (b,1,1)
+        M2 = M[..., None]
+        x = self.e_cm / M2  # has shape (b,1,1)
 
         # Boost and refactor
-        p = boost(q, -Q)
+        p = boost(q, Q, inverse=True)
         p = x * p
 
         w0 = torch.ones((r.shape[0],))

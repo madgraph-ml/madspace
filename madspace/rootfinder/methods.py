@@ -4,12 +4,9 @@ from typing import Callable, Optional
 import torch
 from torch import Tensor
 
-
-MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
-EPS = 4 * torch.finfo(float).eps
 
 
 def newton(
@@ -42,7 +39,7 @@ def newton(
             x1[lower] = (xa[lower] + x0[lower]) / 2
 
         if torch.allclose(x0, x1, atol=XTOL, rtol=RTOL):
-            print(f"coverged after {i} iterations")
+            # print(f"coverged after {i+1} iterations")
             return x1
 
         # Adjust brackets
@@ -82,7 +79,7 @@ def bisect(
         xb[higher] = x1[higher]
 
         if torch.allclose(xa, xb, atol=XTOL, rtol=RTOL):
-            print(f"coverged after {i} iterations")
+            # print(f"coverged after {i+1} iterations")
             return x1
 
         x0 = x1

@@ -7,6 +7,7 @@ from math import pi
 
 MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 
+
 def two_particle_density(s: Tensor, m1: Tensor, m2: Tensor) -> Tensor:
     """Calculates the associated phase-space density
     according to Eq. (C.8) in [1]
@@ -183,32 +184,33 @@ def edot(a: Tensor, b: Tensor) -> Tensor:
     return torch.einsum("...d,...d->...", a, b)
 
 
-def boost(k: Tensor, p_boost: Tensor) -> Tensor:
+def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
     """
     Boost k into the frame of p_boost in argument.
     This means that the following command, for any vector k=(E, px, py, pz)
     gives:
 
-        k  -> k' = boost(k, -k) = (M,0,0,0)
+        k  -> k' = boost(k, k, inverse=True) = (M,0,0,0)
         k' -> k  = boost(k', k) = (E, px, py, pz)
 
     Args:
         k (Tensor): input vector with shape=(b,n,4)/(b,4)
         p_boost (Tensor): boosting vector with shape=(b,1,4)/(b,4)
+        inverse (bool): if boost is performed inverse or forward
 
     Returns:
         k' (Tensor): boosted vector with shape=(b,n,4)/(b,4)
     """
-    # Make sure energy is > 0 even after momentum flip (for inverse boost)
-    p_boost[..., 0] = torch.abs(p_boost[..., 0])
+    # Change sign if inverse boost is performed
+    sign = -1.0 if inverse else 1.0
 
     # Perform the boost
     rsq = sqrt(lsquare(p_boost))
-    k0 = edot(k, p_boost) / rsq
+    k0 = (k[..., 0] * p_boost[..., 0] + sign * edot(k[..., 1:], p_boost[..., 1:])) / rsq
     c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
-    k1 = k[..., 1] + c1 * p_boost[..., 1]
-    k2 = k[..., 2] + c1 * p_boost[..., 2]
-    k3 = k[..., 3] + c1 * p_boost[..., 3]
+    k1 = k[..., 1] + sign * c1 * p_boost[..., 1]
+    k2 = k[..., 2] + sign * c1 * p_boost[..., 2]
+    k3 = k[..., 3] + sign * c1 * p_boost[..., 3]
 
     return torch.stack((k0, k1, k2, k3), dim=-1)
 
@@ -251,10 +253,11 @@ def map_fourvector_rambo(r: Tensor) -> Tensor:
     phi = 2.0 * pi * r[:, :, 1]
 
     q = torch.zeros_like(r)
-    q[:, :, 0] = -log(r[:, :, 2] * r[:, :, 3])
-    q[:, :, 1] = q[:, :, 0] * sqrt(1 - costheta**2) * cos(phi)
-    q[:, :, 2] = q[:, :, 0] * sqrt(1 - costheta**2) * sin(phi)
-    q[:, :, 3] = q[:, :, 0] * costheta
+    q0 = -log(r[:, :, 2] * r[:, :, 3])
+    q[:, :, 0] = q0
+    q[:, :, 1] = q0 * sqrt(1 - costheta**2) * cos(phi)
+    q[:, :, 2] = q0 * sqrt(1 - costheta**2) * sin(phi)
+    q[:, :, 3] = q0 * costheta
 
     return q
 
