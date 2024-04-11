@@ -41,7 +41,7 @@ class RootFinderPolynomial(torch.autograd.Function):
 
         [1] https://en.wikipedia.org/wiki/Inverse_function_rule
         """
-        drdu = ctx.saved_tensors
+        (drdu,) = ctx.saved_tensors
         return grad_output / drdu
 
 
@@ -66,15 +66,15 @@ class RootFinderMass(torch.autograd.Function):
         dpf = lambda x: dpfunc_mass(x, p0, mass)
         guess = 0.5 * torch.ones((p0.shape[0],))
         xi = newton(func, dxif, 0.0, 1.0, guess)
-        
+
         dfdxi = dxif(xi)
         dfdp = dpf(xi)
-        ctx.save_for_backward(dfdxi, dfdp )
+        ctx.save_for_backward(dfdxi, dfdp)
         return xi
 
     @staticmethod
     def backward(ctx, grad_output):
         dfdxi, dfdp = ctx.saved_tensors
         # dx/dp = (df/dx)^(-1) * (df/dp) * (-1)
-        dxidp = -dfdp / dfdxi
-        return grad_output * dxidp, None
+        dxidp = -dfdp / dfdxi[:, None]
+        return grad_output[:, None] * dxidp, None

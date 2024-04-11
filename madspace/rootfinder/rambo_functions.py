@@ -58,7 +58,7 @@ def func_mass(xi: Tensor, p0: Tensor, m: Tensor, e_cm: Tensor) -> Tensor:
         Tensor: function of interest
     """
     root = sqrt(xi[:, None] ** 2 * p0**2 + m**2)
-    f = torch.sum(root, dim=-1) - e_cm[:, 0]
+    f = torch.sum(root, dim=-1) - e_cm
     return f
 
 

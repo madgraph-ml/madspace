@@ -9,6 +9,7 @@ MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 ITER = 100
 XTOL = 2e-12
 RTOL = 4 * torch.finfo(float).eps
+EPS = 4 * torch.finfo(float).eps
 
 
 def newton(
@@ -16,27 +17,21 @@ def newton(
     df: Callable,
     a: float,
     b: float,
-    x0: Optional[Tensor] = None,
+    x0: Tensor = None,
     max_iter: int = ITER,
-    epsilon=1e-8,
+    epsilon=1e-12,
 ):
-    if torch.any(f(a) * f(b) > 0):
-        raise ValueError(f"None or no unique root in given intervall [{a},{b}]")
-
     # Define lower/upper boundaries as tensor
     xa = a * torch.ones_like(x0)
     xb = b * torch.ones_like(x0)
 
-    # initilize guess
-    if x0 is None:
-        x0 = (xa + xb) / 2
+    if torch.any(f(xa) * f(xb) > 0):
+        raise ValueError(f"None or no unique root in given intervall [{a},{b}]")
 
     for i in range(max_iter):
-        if torch.any(df(x0) < epsilon):
-            raise ValueError("Derivative is too small")
-
-        # do newtons-step
-        x1 = x0 - f(x0) / df(x0)
+        # do newtons-step but make sure gradient is not too small
+        df0 = torch.where(df(x0) < epsilon, epsilon, df(x0))
+        x1 = x0 - f(x0) / df0
 
         # check if within given intervall
         higher = x1 > xb
@@ -57,7 +52,7 @@ def newton(
 
         x0 = x1
 
-    print(f"not converged what?")
+    print(f"newton not converged")
     return x0
 
 
@@ -80,7 +75,7 @@ def bisect(
     for i in range(max_iter):
         # define midpoint
         x1 = (xa + xb) / 2
-        
+
         # adjusting brackets
         higher = f(x1) > 0
         xa[~higher] = x1[~higher]
@@ -92,5 +87,5 @@ def bisect(
 
         x0 = x1
 
-    print(f"not converged what?")
+    print(f"bisect not converged")
     return x0
