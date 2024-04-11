@@ -15,7 +15,6 @@ from .helper import (
     two_body_decay_factor,
     boost,
     boost_beam,
-    mass_func,
     lsquare,
 )
 
@@ -33,7 +32,7 @@ class Rambo(PhaseSpaceMapping):
         nparticles: int,
         masses: list[float] = None,
     ):
-        self.nparticles = nparticles
+        self.n_particles = nparticles
         self.e_cm = e_cm
 
         if masses is not None:
@@ -45,9 +44,7 @@ class Rambo(PhaseSpaceMapping):
             e_min = 0.0
 
         if not self.e_cm >= e_min:
-            raise ValueError(
-                f"COM energy needs to be larger than sum of external"
-            )
+            raise ValueError(f"COM energy needs to be larger than sum of external")
 
         dims_in = [(nparticles, 4)]
         dims_out = [(nparticles, 4)]
@@ -71,33 +68,42 @@ class Rambo(PhaseSpaceMapping):
         p = boost(q, -Q)
         p = x * p
 
-        gs = self.density(inputs)
-        
+        w0 = torch.ones((r.shape[0],))
+        gs = w0 * self._massles_weight()
+
         if self.masses is not None:
             # match dimensions of masses
-            m = self.masses[None,...]
+            m = self.masses[None, ...]
 
             # solve for xi in massive case, see Ref. [1]
-            xi = get_xi_parameter(p, m)
-            
+            xi = get_xi_parameter(p[:, :, 0], m)
+
             # Make momenta massive
             xi = xi[:, None, None]
             k = torch.ones_like(p)
             k[:, :, 0] = torch.sqrt(m**2 + xi[:, :, 0] ** 2 * p[:, :, 0] ** 2)
             k[:, :, 1:] = xi * p[:, :, 1:]
 
-            # Get jacobian
-            jac = self.weight(k, p, xi[:, 0, 0])
+            # Get massive density
+            w_m = self._massive_weight(k, p, xi[:, 0, 0])
 
-            return (k,), jac
+            return (k,), w_m * gs
 
         return (p,), gs
 
     def map_inverse(self, inputs, condition=None):
         """Does not exist for Rambo"""
         raise NotImplementedError
-    
-    def _weight(
+
+    def _massles_weight(self):
+        w0 = (
+            (pi / 2.0) ** (self.n_particles - 1)
+            * self.e_cm ** (2 * self.n_particles - 4)
+            / (gamma(self.n_particles) * gamma(self.n_particles - 1))
+        )
+        return w0
+
+    def _massive_weight(
         self,
         k: torch.Tensor,
         p: torch.Tensor,
@@ -110,40 +116,25 @@ class Rambo(PhaseSpaceMapping):
             xi (torch.Tensor, Optional): shift variable with shape=(b,)
 
         Returns:
-            torch.Tensor: weight of sampler
+            torch.Tensor: massive weight
         """
-        # get volume for massless particles
-        w0 = (
-            (pi / 2.0) ** (self.n_particles - 1)
-            * self.e_cm ** (2 * self.n_particles - 4)
-            / (gamma(self.n_particles) * gamma(self.n_particles - 1))
+        # get correction factor for massive ones
+        ks2 = k[:, :, 1] ** 2 + k[:, :, 2] ** 2 + k[:, :, 3] ** 2
+        ps2 = p[:, :, 1] ** 2 + p[:, :, 2] ** 2 + p[:, :, 3] ** 2
+        k0 = k[:, :, 0]
+        p0 = p[:, :, 0]
+        w_M = (
+            xi ** (3 * self.n_particles - 3)
+            * torch.prod(p0 / k0, dim=1)
+            * torch.sum(ps2 / p0, dim=1)
+            / torch.sum(ks2 / k0, dim=1)
         )
-
-        if xi is not None:
-            # get correction factor for massive ones
-            ks = sqrt(k[:, :, 1] ** 2 + k[:, :, 2] ** 2 + k[:, :, 3] ** 2)
-            ps = sqrt(p[:, :, 1] ** 2 + p[:, :, 2] ** 2 + p[:, :, 3] ** 2)
-            k0 = k[:, :, 0]
-            p0 = p[:, :, 0]
-            w_M = (
-                xi ** (3 * self.n_particles - 3)
-                * torch.prod(p0 / k0, dim=1)
-                * torch.sum(ps**2 / p0, dim=1)
-                / torch.sum(ks**2 / k0, dim=1)
-            )
-            return w0 * w_M
-
-        return w0
+        return w_M
 
     def density(self, inputs, condition=None, inverse=False):
+        del condition
         if inverse:
             raise NotImplementedError
 
-        xs = inputs[0]
-        gs = torch.ones(xs.shape[0], dtype=xs.dtype, device=xs.device)
-        vol = (
-            (pi / 2.0) ** (self.nparticles - 1)
-            * self.e_cm ** (2 * self.nparticles - 4)
-            / (gamma(self.nparticles) * gamma(self.nparticles - 1))
-        )
-        return gs * vol
+        _, gs = self.map(self, inputs)
+        return gs
