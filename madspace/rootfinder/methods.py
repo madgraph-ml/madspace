@@ -4,9 +4,10 @@ from typing import Callable, Optional
 import torch
 from torch import Tensor
 
+DEFAULT_FLOAT = torch.get_default_dtype()
 ITER = 100
-XTOL = 2e-12
-RTOL = 4 * torch.finfo(float).eps
+XTOL = 2 * 1e3 * torch.finfo(DEFAULT_FLOAT).eps
+RTOL = 4 * torch.finfo(DEFAULT_FLOAT).eps
 
 
 def newton(
@@ -25,7 +26,7 @@ def newton(
     if torch.any(f(xa) * f(xb) > 0):
         raise ValueError(f"None or no unique root in given intervall [{a},{b}]")
 
-    for i in range(max_iter):
+    for _ in range(max_iter):
         # do newtons-step but make sure gradient is not too small
         df0 = torch.where(df(x0) < epsilon, epsilon, df(x0))
         x1 = x0 - f(x0) / df0

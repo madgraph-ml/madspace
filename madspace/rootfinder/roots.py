@@ -20,6 +20,7 @@ def get_u_parameter(xs: Tensor) -> Tensor:
     """
     return RootFinderPolynomial.apply(xs)
 
+
 def get_xi_parameter(p0: Tensor, mass: Tensor) -> Tensor:
     """Returns the solution of the equation
     ...math::

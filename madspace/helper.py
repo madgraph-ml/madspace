@@ -1,7 +1,7 @@
 """ Helper functions needed for phase-space mappings """
 
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log
+from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs
 from math import pi
 
 
@@ -156,6 +156,18 @@ def lsquare(a: Tensor) -> Tensor:
     return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
 
 
+def mass(a: Tensor) -> Tensor:
+    """Gives the mass of a particle
+
+    Args:
+        a (Tensor): 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    return sqrt(abs(lsquare(a)))
+
+
 def ldot(a: Tensor, b: Tensor) -> Tensor:
     """Gives the Lorentz inner product ab using
     the Mikowski metric (1.0, -1.0, -1.0, -1.0)
@@ -260,6 +272,25 @@ def map_fourvector_rambo(r: Tensor) -> Tensor:
     q[:, :, 3] = q0 * costheta
 
     return q
+
+
+def map_fourvector_rambo_diet(q0: Tensor, costheta: Tensor, phi: Tensor) -> Tensor:
+    """Transform energies and angles into proper 4-momentum
+    Needed for rambo on diet
+
+    Args:
+        q0 (Tensor): energy with shape=(b,n-1)
+        costheta (Tensor): costheta angle with shape shape=(b,n-1)
+        phi (Tensor): azimuthal angle with sshape=(b,n-1)
+
+    Returns:
+        q (Tensor): n 4-Momenta with shape=(b,n-1,4)
+    """
+    qx = q0 * sqrt(1 - costheta**2) * cos(phi)
+    qy = q0 * sqrt(1 - costheta**2) * sin(phi)
+    qz = q0 * costheta
+
+    return torch.stack([q0, qx, qy, qz], dim=-1)
 
 
 def two_body_decay_factor(

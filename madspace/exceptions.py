@@ -5,6 +5,7 @@ _default = "\x1b[00m"
 _green = "\x1b[01;32m"
 _red = "\x1b[01;31m"
 
+
 class InvalidOperationError(Exception):
     """Exception class for meaningless operations."""
 
