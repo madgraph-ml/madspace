@@ -182,6 +182,19 @@ def ldot(a: Tensor, b: Tensor) -> Tensor:
     return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, b)
 
 
+def esquare(a: Tensor) -> Tensor:
+    """Gives the euclidean square a^2 using
+    the Euclidean metric
+
+    Args:
+        a (Tensor): 4-vector with shape=(b,...,4)
+
+    Returns:
+        Tensor: Square with shape=(b,...)
+    """
+    return torch.einsum("...d,...d->...", a, a)
+
+
 def edot(a: Tensor, b: Tensor) -> Tensor:
     """Gives the euclidean inner product ab using
     the Euclidean metric
@@ -217,6 +230,7 @@ def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
     sign = -1.0 if inverse else 1.0
 
     # Perform the boost
+    # This is in fact a numerical more stable implementation then often used
     rsq = sqrt(lsquare(p_boost))
     k0 = (k[..., 0] * p_boost[..., 0] + sign * edot(k[..., 1:], p_boost[..., 1:])) / rsq
     c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
@@ -264,14 +278,12 @@ def map_fourvector_rambo(r: Tensor) -> Tensor:
     costheta = 2.0 * r[:, :, 0] - 1.0
     phi = 2.0 * pi * r[:, :, 1]
 
-    q = torch.zeros_like(r)
     q0 = -log(r[:, :, 2] * r[:, :, 3])
-    q[:, :, 0] = q0
-    q[:, :, 1] = q0 * sqrt(1 - costheta**2) * cos(phi)
-    q[:, :, 2] = q0 * sqrt(1 - costheta**2) * sin(phi)
-    q[:, :, 3] = q0 * costheta
+    qx = q0 * sqrt(1 - costheta**2) * cos(phi)
+    qy = q0 * sqrt(1 - costheta**2) * sin(phi)
+    qz = q0 * costheta
 
-    return q
+    return torch.stack([q0, qx, qy, qz], dim=-1)
 
 
 def map_fourvector_rambo_diet(q0: Tensor, costheta: Tensor, phi: Tensor) -> Tensor:

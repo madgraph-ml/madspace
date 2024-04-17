@@ -2,7 +2,7 @@ import numpy as np
 from typing import Optional, Tuple
 from math import gamma, pi
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, sum, atan2
+from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, atan2
 import torch.functional as F
 import sys
 
@@ -18,6 +18,7 @@ from .helper import (
     boost,
     boost_beam,
     edot,
+    esquare,
     lsquare,
 )
 
@@ -153,20 +154,22 @@ class Rambo(PhaseSpaceMapping):
 
 class RamboOnDiet(PhaseSpaceMapping):
     """Rambo on Diet algorithm as presented in
-        [1] Rambo on diet - https://arxiv.org/abs/1308.2922
+        [2] Rambo on diet - https://arxiv.org/abs/1308.2922
 
-    Note, that here is an error in the algorithm of [1], which has been fixed.
+    Note, that here is an error in the algorithm of [2], which has been fixed.
     For details see:
-        [2] RW's PhD thesis - https://doi.org/10.11588/heidok.00029154
-        [3] ELSA paper - https://arxiv.org/abs/2305.07696
+        [3] RW's PhD thesis - https://doi.org/10.11588/heidok.00029154
+        [4] ELSA paper - https://arxiv.org/abs/2305.07696
     """
 
     def __init__(
         self,
         nparticles: int,
         masses: list[float] = None,
+        checked_emin: bool = False,
     ):
         self.nparticles = nparticles
+        self.checked_emin = checked_emin
 
         if masses is not None:
             self.masses = torch.tensor(masses)
@@ -179,9 +182,6 @@ class RamboOnDiet(PhaseSpaceMapping):
         dims_in = [(3 * nparticles - 4,), ()]
         dims_out = [(nparticles, 4)]
 
-        # For splitting into costheta and phi
-        self.angular_mask = torch.tensor([True, False]).repeat(nparticles - 1)
-
         super().__init__(dims_in, dims_out)
 
     def map(self, inputs: TensorList, condition: TensorList = None):
@@ -191,15 +191,15 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         # Check if the partonic COM energy is large enough
         with torch.no_grad():
-            if torch.any(e_cm <= self.e_min):
-                raise ValueError(
-                    f"partonic COM energy needs to be larger than sum of external masses!"
-                )
+            if not self.checked_emin:
+                if torch.any(e_cm <= self.e_min):
+                    raise ValueError(
+                        f"partonic COM energy needs to be larger than sum of external masses!"
+                    )
 
         # Do rambo on diet loop
         # prepare momenta
         p = torch.empty((r.shape[0], self.nparticles, 4))
-        k = torch.empty((r.shape[0], self.nparticles, 4))
 
         # split random numbers in energy and angular
         ru, romega = r[:, : self.nparticles - 2], r[:, self.nparticles - 2 :]
@@ -209,8 +209,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         u = get_u_parameter(ru)
 
         # split into rcos and rphi
-        rcos = romega[:, self.angular_mask]
-        rphi = romega[:, ~self.angular_mask]
+        rcos, rphi = romega.split(self.nparticles - 1, dim=1)
 
         # Define all angles vectorized
         cos_theta = 2 * rcos - 1
@@ -250,6 +249,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         w0 = torch_ones * self._massles_weight(e_cm)
 
         if self.masses is not None:
+            k = torch.empty((r.shape[0], self.nparticles, 4))
             # match dimensions of masses
             m = self.masses[None, ...]
 
@@ -276,55 +276,51 @@ class RamboOnDiet(PhaseSpaceMapping):
         w0 = self._massles_weight(e_cm)
 
         # Make momenta massless before going back to random numbers
-        p = torch.empty((k.shape[0], self.n_particles, 4))
+        p = torch.empty((k.shape[0], self.nparticles, 4))
         if self.masses is not None:
             # Define masses
             m = self.masses[None, ...]
 
             # solve for xi in massive case, see Ref. [1], here analytic result possible!
-            xi = sum(sqrt(k[:, :, 0] ** 2 - m**2), dim=-1) / e_cm
+            xi = torch.sum(sqrt(k[:, :, 0] ** 2 - m**2), dim=-1) / e_cm
 
             # Make them massless
             xi = xi[:, None, None]
             p[:, :, 0] = torch.sqrt(k[:, :, 0] ** 2 - m**2) / xi[:, :, 0]
             p[:, :, 1:] = k[:, :, 1:] / xi
-            wm = self._massive_weight(k, pi, xi)
-
+            wm = self._massive_weight(k, p, xi[:, 0, 0])
         else:
             xi = None
             wm = 1.0
             p[:, :, 0] = k[:, :, 0]
             p[:, :, 1:] = k[:, :, 1:]
 
-        # Construct random numbers
-        M = torch.empty(k.shape[0])
-        M_prev = torch.empty(k.shape[0])
-        Q = torch.empty((k.shape[0], 4))
-        r = torch.empty((k.shape[0], 3 * self.n_particles - 4))
-
-        # Assign last particle
-        P = torch.cumsum(p[:, :-1], dim=1).flip(1)
-        M = lsquare(P)  # has shape (b, n-1)
-        u = M[:, :-1] / M[:, 1:]
-        iarray = torch.arange(1, self.nparticles)[None, :]
+        # Get random numbers associated to the intermediate masses
+        # have shapees (b, n-1)
+        P = torch.cumsum(p.flip(1), dim=1)[:, 1:]  # has shape (b, n-1)
+        M = sqrt(lsquare(P))
+        # have shapes (b, n-2)
+        um = (M[:, :-1] / M[:, 1:]).flip(1)
+        iarray = torch.arange(2, self.nparticles)[None, :]
         uc = self.nparticles + 1 - iarray
         uexp = 2 * (self.nparticles - iarray)
-        ru = uc * u**uexp - (uc - 1) * u ** (uexp + 2)
+        ru = uc * um**uexp - (uc - 1) * um ** (uexp + 2)
 
+        # Get the angles in correct frames
+        # Here: do all boosts in one go
+        Q = P.flip(1)
         romega = torch.empty((k.shape[0], 2 * self.nparticles - 2))
-        # Has shape=(b,n)
-        Q[:] = p[:, -1]
-        for i in range(self.n_particles, 1, -1):
-            Q += p[:, i - 2]
-            p_prime = boost(p[:, i - 2], Q, inverse=True)
-            pmag = sqrt(edot(p_prime[:, 1:]))
-            costheta = p_prime[:, 3] / pmag
-            romega[:, self.angular_mask] = 0.5 * costheta + 1.0
-            phi = atan2(p_prime[:, 2], p_prime[:, 1])
-            romega[:, ~self.angular_mask] = phi / (2 * pi) + (phi < 0)
+        p_prime = boost(p[:, :-1], Q, inverse=True)
+        pmag = sqrt(esquare(p_prime[..., 1:]))
+        costheta = p_prime[..., 3] / pmag
+        phi = atan2(p_prime[..., 2], p_prime[..., 1])
+
+        # Define the random numbers
+        rcos = 0.5 * (costheta + 1.0)
+        rphi = phi / (2 * pi) + (phi < 0)
 
         # Concat angular and energy random numbers
-        r = torch.cat([ru, romega], dim=-1)
+        r = torch.cat([ru, rcos, rphi], dim=-1)
         return (r, e_cm), 1 / wm / w0
 
     def _massles_weight(self, e_cm):
@@ -366,7 +362,8 @@ class RamboOnDiet(PhaseSpaceMapping):
     def density(self, inputs, condition=None, inverse=False):
         del condition
         if inverse:
-            raise NotImplementedError
+            _, gs_inv = self.map_inverse(self, inputs)
+            return gs_inv
 
         _, gs = self.map(self, inputs)
         return gs
