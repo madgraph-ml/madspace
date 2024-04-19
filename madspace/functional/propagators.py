@@ -10,6 +10,7 @@
 
 
 from typing import Tuple
+import torch
 from torch import Tensor, log, atan, tan
 
 
@@ -64,7 +65,7 @@ def breit_wigner_propagator(
     return s, 1 / gs
 
 
-def stable_propagator_nu_is_one(
+def stable_propagator(
     r_or_s: Tensor,
     mass: Tensor,
     s_min: Tensor,
@@ -91,35 +92,7 @@ def stable_propagator_nu_is_one(
     return s, gsm1
 
 
-def massles_propagator_nu_is_one(
-    r_or_s: Tensor,
-    s_min: Tensor,
-    s_max: Tensor,
-    nu: float = 1.0,
-    inverse: bool = False,
-) -> Tuple[Tensor, Tensor]:
-    # define common variables
-    """Performs mapping for massless propagators
-    \propto 1/s^2 described in (C.5) in [2].
-    Uses a negative m^2 = -a to avoid instabilities
-    with a = -1e-8 as mentioned in [3]
-    """
-    del nu
-    m2 = -1e-8
-    q_max = s_max - m2
-    q_min = s_min - m2
-
-    if inverse:
-        r = log((r_or_s - m2) / q_min) / log(q_max / q_min)
-        gsm1 = (r_or_s - m2) * (log(q_max) - log(q_min))
-        return r, 1 / gsm1
-
-    s = q_max**r_or_s * q_min ** (1 - r_or_s) + m2
-    gsm1 = (s - m2) * (log(q_max) - log(q_min))
-    return s, gsm1
-
-
-def stable_propagator_nu_is_not_one(
+def stable_propagator_nu(
     r_or_s: Tensor,
     mass: Tensor,
     s_min: Tensor,
@@ -149,7 +122,35 @@ def stable_propagator_nu_is_not_one(
     return s, 1 / gs
 
 
-def massless_propagator_nu_is_not_one(
+def massles_propagator(
+    r_or_s: Tensor,
+    s_min: Tensor,
+    s_max: Tensor,
+    nu: float = 1.0,
+    inverse: bool = False,
+) -> Tuple[Tensor, Tensor]:
+    # define common variables
+    """Performs mapping for massless propagators
+    \propto 1/s^2 described in (C.5) in [2].
+    Uses a negative m^2 = -a to avoid instabilities
+    when s_min = 0. , with a = -1e-8 as mentioned in [3]
+    """
+    del nu
+    m2 = torch.where(s_min == 0, -1e-8, 0.0)
+    q_max = s_max - m2
+    q_min = s_min - m2
+
+    if inverse:
+        r = log((r_or_s - m2) / q_min) / log(q_max / q_min)
+        gsm1 = (r_or_s - m2) * (log(q_max) - log(q_min))
+        return r, 1 / gsm1
+
+    s = q_max**r_or_s * q_min ** (1 - r_or_s) + m2
+    gsm1 = (s - m2) * (log(q_max) - log(q_min))
+    return s, gsm1
+
+
+def massless_propagator_nu(
     r_or_s: Tensor,
     s_min: Tensor,
     s_max: Tensor,
@@ -159,10 +160,10 @@ def massless_propagator_nu_is_not_one(
     """Performs mapping for massless propagators
     \propto 1/s^2 described in (C.4) in [2].
     Uses a negative m^2 = -a to avoid instabilities
-    with a = -1e-8 as mentioned in [3]
+    when s_min = 0. , with a = -1e-8 as mentioned in [3]
     """
     # define common variables
-    m2 = -1e-8
+    m2 = torch.where(s_min == 0, -1e-8, 0.0)
     q_max = s_max - m2
     q_min = s_min - m2
     power = 1.0 - nu

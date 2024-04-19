@@ -10,10 +10,10 @@ from .base import PhaseSpaceMapping, TensorList
 from .functional.propagators import (
     uniform_propagator,
     breit_wigner_propagator,
-    massles_propagator_nu_is_one,
-    massless_propagator_nu_is_not_one,
-    stable_propagator_nu_is_one,
-    stable_propagator_nu_is_not_one,
+    massles_propagator,
+    massless_propagator_nu,
+    stable_propagator,
+    stable_propagator_nu,
 )
 
 
@@ -136,9 +136,9 @@ class StableInvariantBlock(_Invariants):
         self.nu = nu
 
         if nu == 1.0:
-            self.prop_function = stable_propagator_nu_is_one
+            self.prop_function = stable_propagator
         else:
-            self.prop_function = stable_propagator_nu_is_not_one
+            self.prop_function = stable_propagator_nu
 
     def map(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
@@ -182,9 +182,9 @@ class MasslessInvariantBlock(_Invariants):
         self.nu = nu
 
         if nu == 1.0:
-            self.prop_function = massles_propagator_nu_is_one
+            self.prop_function = massles_propagator
         else:
-            self.prop_function = massless_propagator_nu_is_not_one
+            self.prop_function = massless_propagator_nu
 
     def map(self, inputs: TensorList, condition: TensorList):
         """Map from random number to s"""
