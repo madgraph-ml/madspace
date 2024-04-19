@@ -250,7 +250,7 @@ def boost_beam(
 
     Args:
         q (Tensor): input vector with shape=(b,n,4)/(b,4)
-        rapidity (Tensor): boosting parameter with shape=(b,1,1)/(b,1)
+        rapidity (Tensor): boosting parameter with shape=(b,1)/(b,)
         inverse (bool, optional): inverse boost. Defaults to False.
 
     Returns:

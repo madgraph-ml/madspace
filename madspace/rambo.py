@@ -2,7 +2,7 @@ import numpy as np
 from typing import Optional, Tuple
 from math import gamma, pi
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, atan2
+from torch import Tensor, arctanh, exp, sqrt, log, atan2
 import torch.functional as F
 import sys
 
@@ -10,6 +10,7 @@ from .rootfinder.roots import get_u_parameter, get_xi_parameter
 
 
 from .base import PhaseSpaceMapping, TensorList
+from .luminosity import Luminosity, FlatLuminosity, ResonantLuminosity
 from .helper import (
     MINKOWSKI,
     map_fourvector_rambo,
@@ -358,6 +359,103 @@ class RamboOnDiet(PhaseSpaceMapping):
             / torch.sum(ks2 / k0, dim=1)
         )
         return w_M
+
+    def density(self, inputs, condition=None, inverse=False):
+        del condition
+        if inverse:
+            _, gs_inv = self.map_inverse(self, inputs)
+            return gs_inv
+
+        _, gs = self.map(self, inputs)
+        return gs
+
+
+class Mahambo(PhaseSpaceMapping):
+    """
+    (Massive) RamboOnDiet including luminosity sampling
+    for hadron colliders.
+    """
+
+    def __init__(
+        self,
+        e_beam: float,
+        nparticles: int,
+        lumi_func: str = "non-resonant",
+        lumi_mass: Tensor = None,
+        lumi_width: Tensor = None,
+        masses: list[float] = None,
+        checked_emin: bool = False,
+    ):
+        self.e_beam = e_beam
+        self.nparticles = nparticles
+
+        if masses is not None:
+            self.masses = torch.tensor(masses)
+            assert len(self.masses) == self.nparticles
+            self.e_min = self.masses.sum
+        else:
+            self.masses = masses
+            self.e_min = torch.tensor(0.0)
+
+        dims_in = [(3 * nparticles - 2,)]
+        dims_out = [(nparticles, 4)]
+
+        self.s_lab = torch.tensor(4 * e_beam**2)
+        self.shat_min = self.e_min**2
+        self.shat_max = self.s_lab
+
+        if lumi_func == "non-resonant":
+            self.luminosity = Luminosity(self.s_lab, self.shat_min, self.shat_max)
+        elif lumi_func == "resonant":
+            self.luminosity = ResonantLuminosity(
+                self.s_lab, lumi_mass, lumi_width, self.shat_min, self.shat_max
+            )
+        else:
+            self.luminosity = FlatLuminosity(self.s_lab, self.shat_min, self.shat_max)
+
+        self.rambo = RamboOnDiet(nparticles, masses, checked_emin=True)
+
+        super().__init__(dims_in, dims_out)
+
+    def map(self, inputs: TensorList, condition=None):
+        r = inputs[0]
+        r_lumi, r_rambo = r[:, :2], r[:, 2:]
+
+        # Get x1 and x2
+        (x1x2,), lumi_det = self.luminosity.map([r_lumi])
+
+        # Get rambo momenta
+        e_cm = sqrt(x1x2.prod(dim=1) * self.s_lab)
+        (p_com,), w_rambo = self.rambo.map([r_rambo, e_cm])
+
+        # Get output momenta an full ps-weight
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]  # needs shape (b,1)
+        p_lab = boost_beam(p_com, rap)
+        ps_weight = lumi_det * w_rambo
+
+        return (p_lab, x1x2), ps_weight
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        p_lab = inputs[0]
+        x1x2 = inputs[1]
+
+        # Get rapidities
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
+
+        # Get lumi rands
+        (r_lumi,), det_lumi_inv = self.luminosity.map_inverse([x1x2])
+
+        # boost into com frame
+        p_com = boost_beam(p_lab, rap, inverse=True)
+
+        # Get rambo random numbers
+        (r_rambo,), w_rambo_inv = self.rambo.map_inverse([p_com])
+
+        # pack all together and get full weight
+        r = torch.concat([r_lumi, r_rambo], dim=1)
+        inv_ps_weight = w_rambo_inv * det_lumi_inv
+
+        return (r,), inv_ps_weight
 
     def density(self, inputs, condition=None, inverse=False):
         del condition
