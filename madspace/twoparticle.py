@@ -485,7 +485,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
     def map_inverse(self, inputs: TensorList, condition=None):
         del condition
-        p_out, q2_in, angles_in = inputs[0]
+        p_out, q2_in, angles_in = inputs[0], inputs[1], inputs[2]
 
         # Extraxt individual momenta
         k1 = p_out[:, 0]

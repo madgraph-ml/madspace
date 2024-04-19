@@ -106,8 +106,8 @@ class _Luminosity(PhaseSpaceMapping):
         """Inverse map from x1,x2 to the random numbers
 
         Args:
-            inputs (TensorList): list with only one tensor [p_decay]
-                p_decay: decay momenta (lab frame) with shape=(b,2,4)
+            inputs (TensorList): list with only one tensor [x1x2]
+                x1x2: parton fractions x1 and x2 with shape=(b,2)
 
         Returns:
             r (Tensor): random numbers with shape=(b,2)

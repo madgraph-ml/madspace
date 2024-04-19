@@ -398,7 +398,7 @@ class Mahambo(PhaseSpaceMapping):
             self.e_min = torch.tensor(0.0)
 
         dims_in = [(3 * nparticles - 2,)]
-        dims_out = [(nparticles, 4)]
+        dims_out = [(nparticles, 4), (2,)]
 
         self.s_lab = torch.tensor(4 * e_beam**2)
         self.shat_min = self.e_min**2
