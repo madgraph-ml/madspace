@@ -264,9 +264,9 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         flat: bool = False,
     ):
         super().__init__(
-            dims_in=[(2,), (2, 4), (2,)],
-            dims_out=[(2, 4), (2,), (2,)],
-            dims_c=None,
+            dims_in=[(2,), (2,)],
+            dims_out=[(2, 4)],
+            dims_c=[(2, 4)],
         )
 
         # Define which t-mapping is used
@@ -282,7 +282,8 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
 
     def map(self, inputs: TensorList, condition=None):
         del condition
-        r, p_in, m_out = inputs[0], inputs[1], inputs[2]
+        r, m_out = inputs[0], inputs[1]
+        p_in = condition[0]
 
         # Extract random numbers, input momenta and output masses
         r1, r2 = r[:, 0], r[:, 1]
@@ -308,7 +309,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         cos_max = (+1.0) * torch.ones_like(p1)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
-        (t,), gs_inv = self.t_map.map([r2], condition=[-tmax, -tmin])
+        (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
 
         # Map from t to cos_theta (needs -t as it samples |t|)
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
@@ -326,23 +327,31 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         k2 = ptot - k1
 
         # get the density and decay momenta
-        gp = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
         p_out = torch.stack([k1, k2], dim=1)
-        q2_in = torch.stack([p1_2, p2_2], dim=1)
-        angles_in = torch.stack([phi1, costheta1], dim=1)
 
-        return (p_out, q2_in, angles_in), gs_inv / gp
+        return (p_out,), det_t / det_two_particle_inv
 
     def map_inverse(self, inputs: TensorList, condition=None):
         del condition
-        p_out, q2_in, angles_in = inputs[0]
+        p_out = inputs[0]
+        p_in = condition[1]
+
+        # Extraxt incoming momenta
+        ptot = p_in.sum(dim=1)
+        p1 = p_in[:, 0]
+        p2 = p_in[:, 1]
+        p1_2 = lsquare(p1)
+        p2_2 = lsquare(p2)
+
+        # Get angles of incoming momenta
+        p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))
+        phi1 = atan2(p1[:, 2], p1[:, 1])
+        costheta1 = p1[:, 3] / p1mag
 
         # Extraxt individual momenta
         k1 = p_out[:, 0]
         k2 = p_out[:, 1]
-        phi1 = angles_in[:, 0]
-        costheta1 = angles_in[:, 1]
-        ptot = p_out.sum(dim=1)
 
         # get invariants and outgoing masses
         m1 = sqrt(lsquare(k1))
@@ -350,43 +359,30 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         m_out = torch.stack([m1, m2], dim=1)
         s = lsquare(ptot)
 
-        # Define incoming momenta and extract their virtualities
-        p1 = torch.zeros(p_out.shape[0], 4, device=p_out.device)
-        p1_2 = q2_in[:, 0]
-        p2_2 = q2_in[:, 1]
-
-        # Define the momenta (in COM frame of decaying particle)
-        p1[:, 0] = (s + p1_2 - p2_2) / (2 * sqrt(s))
-        p1[:, 3] = sqrt(kaellen(s, p1_2, p2_2)) / (2 * sqrt(s))
-        p1 = rotate_zy(p1, phi1, costheta1)
-        p2 = ptot - p1
-
-        # calculate k1 absolute momentum
-        k1mag = sqrt(edot(k1[:, 1:], k1[:, 1:]))
-
         # get rotate away angles from incoming momenta
         # and then extract phi and theta
         k1 = inv_rotate_zy(k1, phi1, costheta1)
+        k1mag = sqrt(edot(k1[:, 1:], k1[:, 1:]))
         costheta = k1[:, 3] / k1mag
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
-        t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
-
-        # Get the random numbers
-        r1 = phi / 2 / pi
         cos_min = (-1.0) * torch.ones_like(k1)
         cos_max = (+1.0) * torch.ones_like(k1)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
-        (r2,), gs_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
+        t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
+
+        # Get the random numbers
+        r1 = phi / 2 / pi
+        (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta
-        gp = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
         p_in = torch.stack([p1, p2], dim=1)
 
-        return (r, p_in, m_out), gs_inv * gp
+        return (r, m_out), det_t_inv * det_two_particle_inv
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""
@@ -412,9 +408,9 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         flat: bool = False,
     ):
         super().__init__(
-            dims_in=[(2,), (2, 4), (2,)],
-            dims_out=[(2, 4), (2,), (2,)],
-            dims_c=None,
+            dims_in=[(2,), (2,)],
+            dims_out=[(2, 4)],
+            dims_c=[(2, 4)],
         )
 
         # Define which t-mapping is used
@@ -430,7 +426,8 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
     def map(self, inputs: TensorList, condition=None):
         del condition
-        r, p_in, m_out = inputs[0], inputs[1], inputs[2]
+        r, m_out = inputs[0], inputs[1]
+        p_in = condition[0]
 
         # Extract random numbers, input momenta and output masses
         r1, r2 = r[:, 0], r[:, 1]
@@ -457,7 +454,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         cos_max = (+1.0) * torch.ones_like(p1)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
-        (t,), gs_inv = self.t_map.map([r2], condition=[-tmax, -tmin])
+        (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
 
         # Map from t to cos_theta (needs -t as it samples |t|)
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
@@ -476,23 +473,32 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         k2 = ptot - k1
 
         # get the density and outputs
-        gp = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
         p_out = torch.stack([k1, k2], dim=1)
-        q2_in = torch.stack([p1_2, p2_2], dim=1)
-        angles_in = torch.stack([phi1, costheta1], dim=1)
 
-        return (p_out, q2_in, angles_in), gs_inv / gp
+        return (p_out,), det_t / det_two_particle_inv
 
     def map_inverse(self, inputs: TensorList, condition=None):
         del condition
-        p_out, q2_in, angles_in = inputs[0], inputs[1], inputs[2]
+        p_out = inputs[0]
+        p_in = condition[1]
 
-        # Extraxt individual momenta
+        # Extraxt incoming momenta
+        ptot = p_in.sum(dim=1)
+        p1 = p_in[:, 0]
+        p2 = p_in[:, 1]
+        p1_2 = lsquare(p1)
+        p2_2 = lsquare(p2)
+        p1_com = boost(p1, ptot, inverse=True)
+
+        # Get angles of incoming momenta
+        p1mag = sqrt(edot(p1_com[:, 1:], p1_com[:, 1:]))
+        phi1 = atan2(p1_com[:, 2], p1_com[:, 1])
+        costheta1 = p1_com[:, 3] / p1mag
+
+        # Get outgoing momenta
         k1 = p_out[:, 0]
         k2 = p_out[:, 1]
-        phi1 = angles_in[:, 0]
-        costheta1 = angles_in[:, 1]
-        ptot = p_out.sum(dim=1)
 
         # get invariants and outgoing masses
         m1 = sqrt(lsquare(k1))
@@ -500,21 +506,9 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         m_out = torch.stack([m1, m2], dim=1)
         s = lsquare(ptot)
 
-        # Define incoming momenta and extract their virtualities
-        p1 = torch.zeros(p_out.shape[0], 4, device=p_out.device)
-        p1_2 = q2_in[:, 0]
-        p2_2 = q2_in[:, 1]
-
-        # Define the momenta (in COM frame of decaying particle)
-        p1[:, 0] = (s + p1_2 - p2_2) / (2 * sqrt(s))
-        p1[:, 3] = sqrt(kaellen(s, p1_2, p2_2)) / (2 * sqrt(s))
-        p1 = rotate_zy(p1, phi1, costheta1)
-        p1 = boost(p1, ptot)
-        p2 = ptot - p1
-
         # boost inverse, rotate back
         # and then extract phi and theta
-        k1 = boost(p1, ptot, inverse=True)
+        k1 = boost(k1, ptot, inverse=True)
         k1 = inv_rotate_zy(k1, phi1, costheta1)
         k1mag = sqrt(edot(k1[:, 1:], k1[:, 1:]))
         costheta = k1[:, 3] / k1mag
@@ -529,14 +523,14 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
         # Get the random numbers
         r1 = phi / 2 / pi
-        (r2,), gs_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
+        (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta
-        gp = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
         p_in = torch.stack([p1, p2], dim=1)
 
-        return (r, p_in, m_out), gs_inv * gp
+        return (r, m_out), det_t_inv * det_two_particle_inv
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""
