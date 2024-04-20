@@ -1,7 +1,6 @@
-""" Implement two-particle mappings.
-    Bases on the mappings described in
-    [1] https://freidok.uni-freiburg.de/data/154629
-    [2] https://arxiv.org/abs/hep-ph/0008033
+""" Implement ps-mappings
+    for two dominant WWW and
+    VBS diagrams
 """
 
 
@@ -24,19 +23,27 @@ class SingleChannelWWW(PhaseSpaceMapping):
     """
     Dominant channel for triple WWW:
 
-                          W+
-                          <
-                          <
-                          <
-      d~ -- < --*vvvvvvvvv*vvvvvvvvv W-
-                |    Z
-                |
-                |
-      u  -- > --*vvvvvvvvv W+
+                              (k1)
+                               W+
+                               <
+                               <
+                         s12   <
+    (p1) d~ --- < ---*vvvvvvvvv*vvvvvvvvv W- (k2)
+                     |
+                     ^ t1
+                     |
+    (p2) u  --- > ---*vvvvvvvvv W+ (k3)
 
+    s-Invariants:
+      shat = (k1 + k2 + k3)^2 = (p1 + p2)^2
+       s12 = (k1 + k2)^2      = (k12)^2
 
-        Fields: fermions d~ und u incoming
-                bosons W+ W+ W- outgoing
+    t-Invariants:
+        t1 = (k12 - p1)^2 = (k3 - p2)^2
+
+    Fields:
+        incoming: u d~
+        outgoing: W+ W- W+
     """
 
     def __init__(
@@ -63,12 +70,12 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # get minimum cuts
         self.s_lab = s_lab
-        s_hat_min = (3 * mw) ** 2
+        self.s_hat_min = (3 * mw) ** 2
 
         # Define mappings
-        self.luminosity = Luminosity(s_lab, s_hat_min)  # 2dof
+        self.luminosity = Luminosity(s_lab, self.s_hat_min)  # 2dof
         self.t1 = tInvariantTwoParticleCOM(nu=1.4)  # 2dof
-        self.s1 = BreitWignerInvariantBlock(mz, wz)  # 1 dof
+        self.s12 = BreitWignerInvariantBlock(mz, wz)  # 1 dof
         self.decay = TwoParticleLAB(mw, mw)  # 2 dof
 
     def map(self, inputs: TensorList, condition=None):
@@ -86,7 +93,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
         r = inputs[1]
         r_lumi = r[:, :2]
         r_t1 = r[:, 2:4]
-        r_s1 = r[:, 4:5]
+        r_s12 = r[:, 4:5]
         r_d = r[:, 5:]
 
         # Do luminosity and get s_hat and rapidity
@@ -94,10 +101,10 @@ class SingleChannelWWW(PhaseSpaceMapping):
         s_hat = self.s_lab * x1x2.prod(dim=1)
         rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
 
-        # Sample s1 propagator
-        s1_min = torch.zeros_like(r_s1[:, 0])
-        s1_max = (sqrt(s_hat) - self.mw) ** 2
-        (s1,), det_s1 = self.s1.map([r_s1], condition=[s1_min, s1_max])
+        # Sample k12 propagator
+        s12_min = (2 * self.mw) ** 2 * torch.ones_like(s_hat)
+        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        (s12,), det_s12 = self.s12.map([r_s12], condition=[s12_min, s12_max])
 
         # construct initial state momenta
         p1 = torch.zeros((r_t1.shape[0], 1, 4))
@@ -109,9 +116,9 @@ class SingleChannelWWW(PhaseSpaceMapping):
         p_t1_in = torch.cat([p1, p2], dim=1)
 
         # get masses/virtualities
-        m1 = sqrt(s1)
-        m2 = torch.ones_like(m1) * self.mw
-        m_out = torch.cat([m1, m2], dim=1)
+        m12 = sqrt(s12)
+        m3 = torch.ones_like(m12) * self.mw
+        m_out = torch.cat([m12, m3], dim=1)
 
         (p_t1_out, _, _), det_t1 = self.t1.map([r_t1, p_t1_in, m_out])
 
@@ -125,7 +132,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Then boost into hadronic lab frame
         p_ext_lab = boost_beam(p_ext, rap)
-        ps_weight = det_lumi * det_s1 * det_t1 * det_decay
+        ps_weight = det_lumi * det_s12 * det_t1 * det_decay
 
         return (p_ext_lab, x1x2), ps_weight
 
@@ -153,17 +160,17 @@ class SingleChannelWWW(PhaseSpaceMapping):
         (r_t1, _, m_out), det_t1_inv = self.t1.map_inverse([p_t1_out, m2_in, angles_in])
 
         # Undo s-channel sampling
-        s1 = m_out[:, 0] ** 2
-        s1_min = torch.zeros_like(s1)
-        s1_max = (sqrt(s_hat) - self.mw) ** 2
-        (r_s1,), det_s1_inv = self.s1.map([s1], condition=[s1_min, s1_max])
+        s12 = m_out[:, 0] ** 2
+        s12_min = torch.zeros_like(s12)
+        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        (r_s12,), det_s12_inv = self.s1.map([s12], condition=[s12_min, s12_max])
 
         # Undo lumi param
         (r_lumi,), det_lumi_inv = self.luminosity.map_inverse([x1x2])
 
         # Pack all together
-        r = torch.cat([r_lumi, r_t1, r_s1, r_d])
-        r_weight = det_lumi_inv * det_s1_inv * det_t1_inv * det_decay_inv
+        r = torch.cat([r_lumi, r_t1, r_s12, r_d])
+        r_weight = det_lumi_inv * det_s12_inv * det_t1_inv * det_decay_inv
 
         return (r,), r_weight
 
@@ -179,21 +186,35 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
 class SingleChannelVBS(PhaseSpaceMapping):
     """
-    Dominant channel for triple WWW:
+    Dominant channel for VBS :
+                                      _ _ _ _ _ _
+    (p1) c --- > ---*vvvvvvvvv W+ (k1)  |       |
+                    |                   |       |
+                    | t3                | k12   |
+                    |                   |       |
+                    *--- > --- s (k2)_ _|       | k123
+                    g                           |
+                    g t2                        |
+                    g                           |
+                    *--- > --- d (k3)_ _ _ _ _ _|
+                    |
+                    | t1
+                    |
+    (p2) u --- > ---*vvvvvvvvv W+ (k4)
 
-                          W+
-                          <
-                          <
-                          <
-      d~ -- < --*vvvvvvvvv*vvvvvvvvv W-
-                |    Z
-                |
-                |
-      u  -- > --*vvvvvvvvv W+
+    s-Invariants:
+      shat = (k1 + k2 + k3 + k4)^2 = (p1 + p2)^2
+      s123 = (k1 + k2 + k3)^2      = (k123)^2
+       s12 = (k1 + k2)^2           = (k12)^2
 
+    t-Invariants:
+        t1 = (k123 - p1)^2 = (k4 - p2)^2
+        t2 = (k12  - p1)^2 = (k3 + k4 - p2)^2
+        t3 = (k1   - p1)^2 = (k2 + k3 + k4 - p2)^2
 
-        Fields: fermions d~ und u incoming
-                bosons W+ W+ W- outgoing
+    Fields:
+        incoming: u c
+        outgoing: W+ W+ d s
     """
 
     def __init__(
@@ -223,8 +244,8 @@ class SingleChannelVBS(PhaseSpaceMapping):
         self.t2 = tInvariantTwoParticleLAB(nu=1.4)  # 2dof
         self.t3 = tInvariantTwoParticleLAB(nu=1.4)  # 2dof
 
-        self.k12 = UniformInvariantBlock()  # 1 dof
-        self.k123 = UniformInvariantBlock()  # 1 dof
+        self.s12 = UniformInvariantBlock()  # 1 dof
+        self.s123 = UniformInvariantBlock()  # 1 dof
 
     def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to moment
@@ -240,8 +261,8 @@ class SingleChannelVBS(PhaseSpaceMapping):
         """
         r = inputs[1]
         r_lumi = r[:, :2]
-        r_k12 = r[:, 2:3]
-        r_k123 = r[:, 3:4]
+        r_s12 = r[:, 2:3]
+        r_s123 = r[:, 3:4]
         r_t1 = r[:, 4:6]
         r_t2 = r[:, 6:8]
         r_t3 = r[:, 8:10]
@@ -260,7 +281,49 @@ class SingleChannelVBS(PhaseSpaceMapping):
         p2[..., 3] = -sqrt(s_hat) / 2
         p_in = torch.cat([p1, p2], dim=1)
 
-        # return (p_ext_lab, x1x2), ps_weight
+        # Sample s-invariants
+        s12_min = torch.ones_like(rap) * self.mw**2
+        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        (s12,), det_s12 = self.s12.map([r_s12], condition=[s12_min, s12_max])
+
+        s123_min = s12
+        s123_max = (sqrt(s_hat) - self.mw) ** 2
+        (s123,), det_s123 = self.s123.map([r_s123], condition=[s123_min, s123_max])
+
+        # Then do t-invariant maps
+        # get masses/virtualities
+        m123 = sqrt(s123)
+        m4 = torch.ones_like(m123) * self.mw
+        m_t1 = torch.cat([m123, m4], dim=1)
+        (k_t1, _, _), det_t1 = self.t1.map([r_t1, p_in, m_t1])
+
+        # Then do the next
+        qt2 = p_in[:, 1] - k_t1[:, 1]
+        p_t2_in = torch.stack([p_in[:, 1], qt2], dim=1)
+        m12 = sqrt(s12)
+        m3 = torch.zeros_like(m12)
+        m_t2 = torch.cat([m12, m3], dim=1)
+        (k_t2, _, _), det_t2 = self.t2.map([r_t2, p_t2_in, m_t2])
+
+        # Then do the next
+        qt3 = qt2 - k_t2[:, 1]
+        p_t3_in = torch.stack([p_in[:, 1], qt3], dim=1)
+        m1 = torch.ones_like(m12) * self.mw
+        m2 = torch.zeros_like(m12)
+        m_t3 = torch.cat([m1, m2], dim=1)
+        (k_t3, _, _), det_t3 = self.t2.map([r_t3, p_t3_in, m_t3])
+
+        # Get all outgoing momenta
+        k_out = torch.stack([k_t3[:, 0], k_t1[:, 1], k_t2[:, 1], k_t1[:, 1]], dim=1)
+
+        # And then all external momenta
+        p_ext = torch.cat([p_in, k_out], dim=1)
+
+        # Then boost into hadronic lab frame
+        p_ext_lab = boost_beam(p_ext, rap)
+        ps_weight = det_lumi * det_s12 * det_s123 * det_t1 * det_t2 * det_t3
+
+        return (p_ext_lab, x1x2), ps_weight
 
     def map_inverse(self, inputs: TensorList, condition=None):
         pass
