@@ -37,34 +37,27 @@ class TwoParticleCOM(PhaseSpaceMapping):
         [3] https://freidok.uni-freiburg.de/data/154629
     """
 
-    def __init__(
-        self,
-        m1: Tensor,
-        m2: Tensor,
-    ):
-        """
-        Args:
-            m1 (Tensor): Mass of decay particle 1
-            m2 (Tensor): Mass of decay particle 2
-        """
-        super().__init__(dims_in=[(2,), ()], dims_out=[(2, 4)], dims_c=None)
-        self.m1 = m1
-        self.m2 = m2
+    def __init__(self):
+        dims_in = [(2,), (), (2,)]
+        dims_out = [(2, 4)]
+        super().__init__(dims_in, dims_out)
 
     def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
         Args:
-            inputs: list of two tensors [r, s]
+            inputs (TensorList): list of two tensors [r, s, m_out]
                 r: random numbers with shape=(b,2)
                 s: squared COM energy with shape=(b,)
+                m_out: (virtual) masses of outgoing particles
+                    with shape=(b,2)
 
         Returns:
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
             det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
-        r, s = inputs[0], inputs[1]
+        r, s, m_out = inputs[0], inputs[1], inputs[3]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         p2 = torch.zeros(r.shape[0], 4, device=r.device)
         if torch.any(s < 0):
@@ -75,22 +68,25 @@ class TwoParticleCOM(PhaseSpaceMapping):
         # Define the angles
         phi = 2 * pi * r1
         costheta = 2 * r2 - 1
+        g_angular = 4 * pi
 
         # Define the momenta (in COM frame of decaying particle)
-        p1[:, 0] = (s + self.m1**2 - self.m2**2) / (2 * sqrt(s))
-        p2[:, 0] = (s + self.m2**2 - self.m1**2) / (2 * sqrt(s))
-        p1[:, 3] = sqrt(kaellen(s, self.m1**2, self.m2**2)) / (2 * sqrt(s))
+        m1 = m_out[:, 0]
+        m2 = m_out[:, 1]
+        p1[:, 0] = (s + m1**2 - m2**2) / (2 * sqrt(s))
+        p2[:, 0] = (s + m2**2 - m1**2) / (2 * sqrt(s))
+        p1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / (2 * sqrt(s))
 
         # Rotate and define p2 spatial components
         p1 = rotate_zy(p1, phi, costheta)
         p2[:, 1:] = -p1[:, 1:]
 
         # get the density and decay momenta
-        # (C.10) in [2] == (C.8)/(4PI)
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
+        # (C.10) in [2] == (C.8) * (4PI)
+        gs = two_particle_density(s, m1**2, m2**2) * g_angular
         p_decay = torch.stack([p1, p2], dim=1)
 
-        return (p_decay,), 1 / gs
+        return (p_decay,), gs
 
     def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
@@ -105,6 +101,10 @@ class TwoParticleCOM(PhaseSpaceMapping):
         """
         del condition
         p_decay = inputs[0]
+        m_out = sqrt(lsquare(p_decay))
+        m1 = m_out[:, 0]
+        m2 = m_out[:, 1]
+
         # Decaying particle in lab-frame
         p0 = p_decay.sum(dim=1)
         s = lsquare(p0)
@@ -120,24 +120,32 @@ class TwoParticleCOM(PhaseSpaceMapping):
         # Get the random numbers
         r1 = phi / 2 / pi
         r2 = (costheta + 1) / 2
+        g_angular = 4 * pi
+
+        # get the density and random numbers
+        # (C.10) in [2] == (C.8)/(4PI)
+        gs = two_particle_density(s, m1**2, m2**2) * g_angular
         r = torch.stack([r1, r2], dim=1)
 
-        # get the density and decay momenta
-        # (C.10) in [2] == (C.8)/(4PI)
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
-
-        return (r, s), gs
+        return (r, s, m_out), 1 / gs
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         del condition
         if inverse:
-            s = inputs[1]
-            gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
-            return gs
+            p_decay = inputs[0]
+            p1sq = lsquare(p_decay)[:, 0]
+            p2sq = lsquare(p_decay)[:, 1]
+            # Get full COM
+            p0 = p_decay.sum(dim=1)
+            s = lsquare(p0)
+            gs = two_particle_density(s, p1sq, p2sq) * (4 * pi)
+            return 1 / gs
 
-        s = lsquare(inputs[0].sum(dim=1))
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
-        return 1 / gs
+        s = inputs[1]
+        m1 = inputs[2][:, 0]
+        m2 = inputs[2][:, 1]
+        gs = two_particle_density(s, m1**2, m2**2) * (4 * pi)
+        return gs
 
 
 class TwoParticleLAB(PhaseSpaceMapping):
@@ -147,29 +155,27 @@ class TwoParticleLAB(PhaseSpaceMapping):
         [3] https://freidok.uni-freiburg.de/data/154629
     """
 
-    def __init__(
-        self,
-        m1: Tensor,
-        m2: Tensor,
-    ):
-        super().__init__(dims_in=[(2,), (4,)], dims_out=[(2, 4)], dims_c=None)
-        self.m1 = m1  # Mass of decay particle 1
-        self.m2 = m2  # Mass of decay particle 2
+    def __init__(self):
+        dims_in = [(2,), (4,), (2,)]
+        dims_out = [(2, 4)]
+        super().__init__(dims_in, dims_out)
 
     def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
         Args:
-            inputs (TensorList): list of two tensors [r, p0]
+            inputs (TensorList): list of two tensors [r, s, m_out]
                 r: random numbers with shape=(b,2)
                 p0: total momentum in lab frame with shape=(b,4)
+                m_out: (virtual) masses of outgoing particles
+                    with shape=(b,2)
 
         Returns:
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
             det (Tensor): det of mapping with shape=(b,)
         """
         del condition
-        r, p0 = inputs[0], inputs[1]
+        r, p0, m_out = inputs[0], inputs[1], inputs[3]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
 
@@ -182,10 +188,13 @@ class TwoParticleLAB(PhaseSpaceMapping):
         # Define the angles
         phi = 2 * pi * r1
         costheta = 2 * r2 - 1
+        g_angular = 4 * pi
 
         # Define the momenta (in COM frame of decaying particle)
-        p1[:, 0] = (s + self.m1**2 - self.m2**2) / (2 * sqrt(s))
-        p1[:, 3] = sqrt(kaellen(s, self.m1**2, self.m2**2)) / (2 * sqrt(s))
+        m1 = m_out[:, 0]
+        m2 = m_out[:, 1]
+        p1[:, 0] = (s + m1**2 - m2**2) / (2 * sqrt(s))
+        p1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / (2 * sqrt(s))
 
         # First rotate, then boost into lab-frame
         p1 = rotate_zy(p1, phi, costheta)
@@ -193,10 +202,10 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p2 = p0 - p1
 
         # get the density and decay momenta
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
+        gs = two_particle_density(s, m1**2, m2**2) * g_angular
         p_decay = torch.stack([p1, p2], dim=1)
 
-        return (p_decay,), 1 / gs
+        return (p_decay,), gs
 
     def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
@@ -211,6 +220,9 @@ class TwoParticleLAB(PhaseSpaceMapping):
         """
         del condition
         p_decay = inputs[0]
+        m_out = sqrt(lsquare(p_decay))
+        m1 = m_out[:, 0]
+        m2 = m_out[:, 1]
 
         # Decaying particle in lab-frame
         p0 = p_decay.sum(dim=1)
@@ -230,23 +242,31 @@ class TwoParticleLAB(PhaseSpaceMapping):
         # Get the random numbers
         r1 = phi / 2 / pi
         r2 = (costheta + 1) / 2
-        r = torch.stack([r1, r2], dim=1)
+        g_angular = 4 * pi
 
         # get the density
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
+        gs = two_particle_density(s, m1**2, m2**2) * g_angular
+        r = torch.stack([r1, r2], dim=1)
 
-        return (r, p0), gs
+        return (r, p0, m_out), 1 / gs
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         del condition
         if inverse:
-            s = lsquare(inputs[1])
-            gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
-            return gs
+            p_decay = inputs[0]
+            p1sq = lsquare(p_decay)[:, 0]
+            p2sq = lsquare(p_decay)[:, 1]
+            # Get full COM
+            p0 = p_decay.sum(dim=1)
+            s = lsquare(p0)
+            gs = two_particle_density(s, p1sq, p2sq) * (4 * pi)
+            return 1 / gs
 
-        s = lsquare(inputs[0].sum(dim=1))
-        gs = two_particle_density(s, self.m1, self.m2) / (4 * pi)
-        return 1 / gs
+        s = lsquare(inputs[1])
+        m1 = inputs[2][:, 0]
+        m2 = inputs[2][:, 1]
+        gs = two_particle_density(s, m1**2, m2**2) * (4 * pi)
+        return gs
 
 
 class tInvariantTwoParticleCOM(PhaseSpaceMapping):
@@ -263,11 +283,10 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         nu: float = 1.4,
         flat: bool = False,
     ):
-        super().__init__(
-            dims_in=[(2,), (2,)],
-            dims_out=[(2, 4)],
-            dims_c=[(2, 4)],
-        )
+        dims_in = [(2,), (2,)]
+        dims_out = [(2, 4)]
+        dims_c = [(2, 4)]
+        super().__init__(dims_in, dims_out, dims_c)
 
         # Define which t-mapping is used
         # MadGraph only uses flat mappings for t? (Check with Olivio)
@@ -281,6 +300,20 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
             self.t_map = BreitWignerInvariantBlock(mass=mt, width=wt)
 
     def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of two tensors [r, m_out]
+                r: random numbers with shape=(b,2)
+                m_out: (virtual) masses of outgoing particles
+                    with shape=(b,2)
+            condition: list with single tensor [p_in]
+                p_in: incoming momenta with shape=(b,2,4)
+
+        Returns:
+            p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
         del condition
         r, m_out = inputs[0], inputs[1]
         p_in = condition[0]
@@ -303,6 +336,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
 
         # Get phi angle
         phi = 2 * r1 * pi
+        det_phi = 2 * pi
 
         # get t_min and max
         cos_min = (-1.0) * torch.ones_like(p1)
@@ -327,10 +361,10 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         k2 = ptot - k1
 
         # get the density and decay momenta
-        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
         p_out = torch.stack([k1, k2], dim=1)
 
-        return (p_out,), det_t / det_two_particle_inv
+        return (p_out,), det_t * det_two_particle_inv * det_phi
 
     def map_inverse(self, inputs: TensorList, condition=None):
         del condition
@@ -375,14 +409,15 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
 
         # Get the random numbers
         r1 = phi / 2 / pi
+        det_phi_inv = 1 / (2 * pi)
         (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta
-        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
         p_in = torch.stack([p1, p2], dim=1)
 
-        return (r, m_out), det_t_inv * det_two_particle_inv
+        return (r, m_out), det_t_inv / det_two_particle_inv * det_phi_inv
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""
@@ -407,11 +442,10 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         nu: float = 1.4,
         flat: bool = False,
     ):
-        super().__init__(
-            dims_in=[(2,), (2,)],
-            dims_out=[(2, 4)],
-            dims_c=[(2, 4)],
-        )
+        dims_in = [(2,), (2,)]
+        dims_out = [(2, 4)]
+        dims_c = [(2, 4)]
+        super().__init__(dims_in, dims_out, dims_c)
 
         # Define which t-mapping is used
         # MadGraph only uses flat mappings for t!
@@ -425,6 +459,20 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
             self.t_map = BreitWignerInvariantBlock(mass=mt, width=wt)
 
     def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of two tensors [r, m_out]
+                r: random numbers with shape=(b,2)
+                m_out: (virtual) masses of outgoing particles
+                    with shape=(b,2)
+            condition: list with single tensor [p_in]
+                p_in: incoming momenta with shape=(b,2,4)
+
+        Returns:
+            p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
         del condition
         r, m_out = inputs[0], inputs[1]
         p_in = condition[0]
@@ -448,6 +496,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
         # Get phi angle
         phi = 2 * r1 * pi
+        det_phi = 2 * pi
 
         # get t_min and max
         cos_min = (-1.0) * torch.ones_like(p1)
@@ -473,10 +522,10 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         k2 = ptot - k1
 
         # get the density and outputs
-        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
         p_out = torch.stack([k1, k2], dim=1)
 
-        return (p_out,), det_t / det_two_particle_inv
+        return (p_out,), det_t * det_two_particle_inv * det_phi
 
     def map_inverse(self, inputs: TensorList, condition=None):
         del condition
@@ -523,14 +572,15 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
 
         # Get the random numbers
         r1 = phi / 2 / pi
+        det_phi_inv = 1 / (2 * pi)
         (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta
-        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2) / (2 * pi)
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
         p_in = torch.stack([p1, p2], dim=1)
 
-        return (r, m_out), det_t_inv * det_two_particle_inv
+        return (r, m_out), det_t_inv / det_two_particle_inv * det_phi_inv
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""

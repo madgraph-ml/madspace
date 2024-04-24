@@ -8,20 +8,33 @@ from math import pi
 MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 
 
-def two_particle_density(s: Tensor, m1: Tensor, m2: Tensor) -> Tensor:
+def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
     """Calculates the associated phase-space density
     according to Eq. (C.8) in [1]
 
     Args:
         s (Tensor): squared COM energy of the proces with shape=(b,)
-        m1 (Tensor): Mass of decay particle 1 with shape=(b,)
-        m2 (Tensor): Mass of decay particle 2 with shape=(b,)
+        p1_2 (Tensor): Mass/virtualiy of outgoing particle 1 with shape=(b,)
+        p2_2 (Tensor): Mass/virtualiy of outgoing particle 1 with shape=(b,)
 
     Returns:
         g (Tensor): returns the density with shape=(b,)
     """
-    g = (8 * s) / sqrt(kaellen(s, m1**2, m2**2))
-    return g
+    # No overall (2*pi)^(-2) here!
+    g2 = sqrt(kaellen(s, p1_2, p2_2)) / (8 * s)
+    return g2
+
+
+def three_particle_density() -> Tensor:
+    """Calculates the associated phase-space density
+    according to Eq. (G.12) in [2]
+
+    Returns:
+        g (Tensor): returns the density with shape=(b,)
+    """
+    # No overall (2*pi)^(-5) here!
+    g2 = torch.tensor(1 / 8.0)
+    return g2
 
 
 def tinv_two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
@@ -36,7 +49,8 @@ def tinv_two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
     Returns:
         g (Tensor): returns the density with shape=(b,)
     """
-    g = 4 * sqrt(kaellen(s, p1_2, p2_2))
+    # No overall (2*pi)^(-2) here!
+    g = 1 / (4 * sqrt(kaellen(s, p1_2, p2_2)))
     return g
 
 

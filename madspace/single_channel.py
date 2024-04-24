@@ -77,7 +77,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
         self.luminosity = Luminosity(s_lab, self.s_hat_min)  # 2dof
         self.t1 = tInvariantTwoParticleCOM(nu=1.4)  # 2dof
         self.s12 = BreitWignerInvariantBlock(mz, wz)  # 1 dof
-        self.decay = TwoParticleLAB(mw, mw)  # 2 dof
+        self.decay = TwoParticleLAB()  # 2 dof
 
         # Get correct factors of pi
         # has to be (2*Pi)^(4-3*n)
@@ -131,7 +131,8 @@ class SingleChannelWWW(PhaseSpaceMapping):
         # prepare decay of z-boson
         k12 = k12k3[:, 0]
         k3 = k12k3[:, 1]
-        (k1k2,), det_decay = self.decay.map([r_d, k12])
+        m1m2 = torch.stack([self.mw, self.mw])[None, :]
+        (k1k2,), det_decay = self.decay.map([r_d, k12, m1m2])
 
         # Pack all momenta including initial state
         k1, k2 = k1k2[:, 0], k1k2[:, 1]
@@ -173,7 +174,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Undo decay
         k1k2 = p_ext[:, 2:4]
-        (r_d, k12), det_decay_inv = self.decay.map_inverse([k1k2])
+        (r_d, k12, _), det_decay_inv = self.decay.map_inverse([k1k2])
 
         # Undo t-channel 2->2
         k12k3 = torch.concat([k12, k3])
@@ -383,14 +384,14 @@ class SingleChannelVBS(PhaseSpaceMapping):
         # t1 map
         k123 = k1 + k2 + k3
         k123k4 = torch.stack([k123, k4], dim=1)
-        (r_t1, _), det_t1_inv = self.t3.map_inverse([k123k4], condition=[p_in])
+        (r_t1, _), det_t1_inv = self.t1.map_inverse([k123k4], condition=[p_in])
 
         # t1 map
         k12 = k1 + k2
         qt2 = p1 - k4
         p_t2_in = torch.stack([p1, qt2], dim=1)
         k12k3 = torch.stack([k12, k3], dim=1)
-        (r_t2, _), det_t2_inv = self.t3.map_inverse([k12k3], condition=[p_t2_in])
+        (r_t2, _), det_t2_inv = self.t2.map_inverse([k12k3], condition=[p_t2_in])
 
         # t3 map
         qt3 = qt2 - k3
