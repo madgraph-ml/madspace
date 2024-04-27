@@ -1,7 +1,7 @@
 """ Helper functions needed for phase-space mappings """
 
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs
+from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs, atan2
 from math import pi
 
 
@@ -168,6 +168,153 @@ def lsquare(a: Tensor) -> Tensor:
         Tensor: Lorentzscalar with shape=(b,...)
     """
     return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+
+
+def rapidity(p: Tensor) -> Tensor:
+    """Gives the rapidity of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    Es = p[..., 0]
+    Pz = p[..., 3]
+
+    y = 0.5 * log((Es + Pz) / (Es - Pz))
+    return torch.where(Es == 0, 99.0, y)
+
+
+def phi(p: Tensor) -> Tensor:
+    """Gives the azimuthal phi of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    phi = atan2(p[..., 2], p[..., 1])
+    return phi
+
+
+def pt2(p: Tensor) -> Tensor:
+    """Gives the squared pT of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    pt2 = p[..., 1] ** 2 + p[..., 2] ** 2
+    return pt2
+
+
+def pt(p: Tensor) -> Tensor:
+    """Gives the pT of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    return sqrt(pt2(p))
+
+
+def vec3(p: Tensor) -> Tensor:
+    """Gives the 3-vector of 4-mometum
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: 3-momentum with shape=(b,...,3)
+    """
+    return p[..., 1:]
+
+
+def delta_rap(p: Tensor, q: Tensor) -> Tensor:
+    """Gives Delta-rapidity between two (sets) of 4-momenta p and q
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+        q (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: delta_y with shape=(b,...)
+    """
+    dy = rapidity(p) - rapidity(q)
+    return torch.abs(dy)
+
+
+def delta_phi(p: Tensor, q: Tensor) -> Tensor:
+    """Gives Delta-rapidity between two (sets) of 4-momenta p and q
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+        q (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: 3-momentum with shape=(b,...,3)
+    """
+    dphi = torch.abs(phi(p) - phi(q))
+    dphi = torch.where(dphi > pi, 2 * pi - dphi, dphi)
+    return dphi
+
+
+def deltaR(p: Tensor, q: Tensor) -> Tensor:
+    """Gives DeltaR between two (sets) of 4-momenta p and q
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+        q (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: 3-momentum with shape=(b,...,3)
+    """
+    dy = delta_rap(p, q)
+    dphi = delta_phi(p, q)
+    return sqrt(dy**2 + dphi**2)
+
+
+def pmag2(p: Tensor) -> Tensor:
+    """Gives the squared three-momentum |p_vec|^2
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    pmag2 = esquare(p[..., 1:])
+    return pmag2
+
+
+def pmag(p: Tensor) -> Tensor:
+    """Gives the absolute three-momentum |p_vec|
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    return sqrt(pmag2(p))
+
+
+def costheta(p: Tensor) -> Tensor:
+    """Gives the costheta angle of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    return p[..., 3] / pmag(p)
 
 
 def mass(a: Tensor) -> Tensor:
