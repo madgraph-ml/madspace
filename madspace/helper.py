@@ -199,7 +199,7 @@ def phi(p: Tensor) -> Tensor:
     return phi
 
 
-def pt2(p: Tensor) -> Tensor:
+def pT2(p: Tensor) -> Tensor:
     """Gives the squared pT of a particle
 
     Args:
@@ -212,7 +212,7 @@ def pt2(p: Tensor) -> Tensor:
     return pt2
 
 
-def pt(p: Tensor) -> Tensor:
+def pT(p: Tensor) -> Tensor:
     """Gives the pT of a particle
 
     Args:
@@ -221,7 +221,7 @@ def pt(p: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(pt2(p))
+    return sqrt(pT2(p))
 
 
 def vec3(p: Tensor) -> Tensor:
