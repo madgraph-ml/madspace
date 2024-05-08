@@ -1,18 +1,29 @@
 from madspace.diagram_mapping import *
+from madspace.single_channel import SingleChannelVBS, SingleChannelWWW
 
 MW = 80.377
 WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
+
+def print_info(diagram):
+    print("t vertices", diagram.t_channel_vertices)
+    print("t lines   ", diagram.t_channel_lines)
+    print("s vertices", diagram.s_channel_vertices)
+    print("s lines   ", diagram.s_channel_lines)
+    print("min sqrt s", [line.sqrt_s_min for line in diagram.s_channel_lines])
+    print(diagram.s_decay_layers)
+
+
 print("====== VBS ======")
 in1 = Line()
 in2 = Line()
 
 out1 = Line(mass=MW)
-out2 = Line(mass=MW)
+out2 = Line()
 out3 = Line()
-out4 = Line()
+out4 = Line(mass=MW)
 
 t1 = Line()
 t2 = Line()
@@ -23,12 +34,18 @@ v2 = Vertex([t3, out2, t2])
 v3 = Vertex([t2, out3, t1])
 v4 = Vertex([t1, out4, in2])
 
-vbs = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3, out4], vertices=[v1, v2, v3, v4])
+r = torch.rand(3, 10)
+vbsmap = SingleChannelVBS(torch.tensor(13000.**2), torch.tensor([MW]))
+(p_hand, x_hand), jac_hand = vbsmap.map([r])
 
-print("t vertices", vbs.t_channel_vertices)
-print("t lines   ", vbs.t_channel_lines)
-print("s vertices", vbs.s_channel_vertices)
-print("s lines   ", vbs.s_channel_lines)
+vbs = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3, out4], vertices=[v1, v2, v3, v4])
+dmap = DiagramMapping(vbs, torch.tensor(13000.**2))
+(p_auto, x_auto), jac_auto = dmap.map([r])
+
+print(p_auto - p_hand)
+print(x_auto - x_hand)
+print(jac_auto - jac_hand)
+print_info(vbs)
 
 print()
 print("====== WWW ======")
@@ -47,9 +64,15 @@ v1 = Vertex([in1, s1, t1])
 v2 = Vertex([t1, in2, out3])
 v3 = Vertex([s1, out1, out2])
 
-www = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3], vertices=[v1, v2, v3])
+r = torch.rand(3, 7)
+vbsmap = SingleChannelWWW(torch.tensor(13000.**2), torch.tensor(MW), torch.tensor(MZ), torch.tensor(WZ))
+(p_hand, x_hand), jac_hand = vbsmap.map([r])
 
-print("t vertices", www.t_channel_vertices)
-print("t lines   ", www.t_channel_lines)
-print("s vertices", www.s_channel_vertices)
-print("s lines   ", www.s_channel_lines)
+www = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3], vertices=[v1, v2, v3])
+dmap = DiagramMapping(www, torch.tensor(13000.**2))
+(p_auto, x_auto), jac_auto = dmap.map([r])
+
+print(p_auto - p_hand)
+print(x_auto - x_hand)
+print(jac_auto - jac_hand)
+print_info(www)

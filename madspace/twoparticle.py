@@ -175,7 +175,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
             det (Tensor): det of mapping with shape=(b,)
         """
         del condition
-        r, p0, m_out = inputs[0], inputs[1], inputs[3]
+        r, p0, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
 

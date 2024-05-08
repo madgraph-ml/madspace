@@ -264,23 +264,23 @@ class DiagramMapping(PhaseSpaceMapping):
             layer_masses = []
             for decay_count in layer_counts:
                 sqrt_s_min.append(sum(
-                    sqrt_s[sqrt_s_index + i] for i in range(decay_count)
+                    sqrt_s[sqrt_s_index + i][:, None] for i in range(decay_count)
                 ))
-                if decay_count > 1:
-                    layer_masses.append(sqrt_s[sqrt_s_index : sqrt_s_index + decay_count])
+                layer_masses.append(sqrt_s[sqrt_s_index : sqrt_s_index + decay_count])
                 sqrt_s_index += decay_count
             decay_masses.append(layer_masses)
 
             sqrt_s = []
-            for i, (decay_count, invariant) in enumerate(zip(layer_counts, layer_invariants)):
+            invariant_iter = iter(layer_invariants)
+            for i, decay_count in enumerate(layer_counts):
                 if decay_count == 1:
-                    sqrt_s.append(sqrt_s_min[i])
+                    sqrt_s.append(sqrt_s_min[i][:, 0])
                     continue
                 s_min = sqrt_s_min[i] ** 2
-                s_max = (sqrt_s_hat - sum(sqrt_s) - sum(sqrt_s_min[i+1:])) ** 2
-                (s, ), jac = invariant.map([rand(), m], condition=[s_min, s_max])
-                sqrt_s.append(s.sqrt())
-                ps_weight *= jac
+                s_max = (sqrt_s_hat[:, None] - sum(sqrt_s) - sum(sqrt_s_min[i+1:])) ** 2
+                (s, ), jac = next(invariant_iter).map([rand()], condition=[s_min, s_max])
+                sqrt_s.append(s[:, 0].sqrt())
+                ps_weight *= jac[:, 0]
 
         # sample s-invariants from the t-channel part of the diagram
         sqrt_s_min = sqrt_s[0][:, None]
@@ -301,7 +301,6 @@ class DiagramMapping(PhaseSpaceMapping):
             self.t_invariants, reversed(cumulated_sqrt_s), reversed(sqrt_s[1:])
         ):
             m_t = torch.cat([cum_sqrt_s, out_sqrt_s[:,None]], dim=1)
-            #print(m_t, cum_sqrt_s, out_sqrt_s, p_t_in)
             (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
             k_rest, k = ks[:, 0], ks[:, 1]
             k_t.append(k)
@@ -317,9 +316,9 @@ class DiagramMapping(PhaseSpaceMapping):
         ):
             p_out = []
             decay_iter = iter(layer_decays)
-            for count, k_in, masses in zip(layer_counts, p_out, layer_masses):
+            for count, k_in, masses in zip(layer_counts, p_out_prev.unbind(dim=1), layer_masses):
                 if count == 1:
-                    p_out.append(k_in)
+                    p_out.append(k_in[:, None, :])
                     continue
                 m_out = torch.stack(masses, dim=1)
                 (k_out, ), jac = next(decay_iter).map([rand(2), k_in, m_out])

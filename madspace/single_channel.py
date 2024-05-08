@@ -18,7 +18,6 @@ from .twoparticle import (
 )
 from .luminosity import Luminosity
 from .invariants import BreitWignerInvariantBlock, UniformInvariantBlock
-from icecream import ic
 
 
 class SingleChannelWWW(PhaseSpaceMapping):
@@ -98,10 +97,10 @@ class SingleChannelWWW(PhaseSpaceMapping):
             det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
-        r = inputs[1]
+        r = inputs[0]
         r_lumi = r[:, :2]
-        r_t1 = r[:, 2:4]
-        r_s12 = r[:, 4:5]
+        r_s12 = r[:, 2:3]
+        r_t1 = r[:, 3:5]
         r_d = r[:, 5:]
 
         # Do luminosity and get s_hat and rapidity
@@ -142,7 +141,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Then boost into hadronic lab frame
         p_ext_lab = boost_beam(p_ext, rap)
-        ps_weight = det_lumi * det_s12 * det_t1 * det_decay
+        ps_weight = det_lumi * det_s12[:,0] * det_t1 * det_decay
 
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
@@ -356,7 +355,7 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Then boost into hadronic lab frame
         p_ext_lab = boost_beam(p_ext, rap)
-        ps_weight = det_lumi * det_s12 * det_s123 * det_t1 * det_t2 * det_t3
+        ps_weight = det_lumi * det_s12[:,0] * det_s123[:,0] * det_t1 * det_t2 * det_t3
 
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
