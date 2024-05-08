@@ -21,7 +21,7 @@ def costheta_to_invt(
     m1: Tensor,
     m2: Tensor,
     costheta: Tensor,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tensor:
     """Mandelstam invariant t=(p1-k1)^2 formula (C.21) in https://arxiv.org/pdf/hep-ph/0008033.pdf
     p=p1+p2 is at rest;
     p1, p2 are opposite along z-axis
@@ -42,7 +42,7 @@ def invt_to_costheta(
     m1: Tensor,
     m2: Tensor,
     t: Tensor,
-) -> Tuple[Tensor, Tuple[Tensor]]:
+) -> Tensor:
     """
     https://arxiv.org/pdf/hep-ph/0008033.pdf Eq.(C.21)
     invert t=(p1-k1)^2 to cos_theta = ...
