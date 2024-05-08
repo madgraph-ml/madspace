@@ -288,7 +288,7 @@ class SingleChannelVBS(PhaseSpaceMapping):
             det (Tensor): log det of mapping with shape=(b,)
         """
         # Unpack random numbers
-        r = inputs[1]
+        r = inputs[0]
         r_lumi = r[:, :2]  # 2 dof
         r_s12 = r[:, 2:3]  # 1 dof
         r_s123 = r[:, 3:4]  # 1 dof

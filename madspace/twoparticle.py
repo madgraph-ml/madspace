@@ -314,7 +314,6 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
             det (Tensor): log det of mapping with shape=(b,)
         """
-        del condition
         r, m_out = inputs[0], inputs[1]
         p_in = condition[0]
 
@@ -339,8 +338,8 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         det_phi = 2 * pi
 
         # get t_min and max
-        cos_min = (-1.0) * torch.ones_like(p1)
-        cos_max = (+1.0) * torch.ones_like(p1)
+        cos_min = (-1.0) * torch.ones_like(s)
+        cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
         (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
@@ -473,7 +472,6 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
             p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
             det (Tensor): log det of mapping with shape=(b,)
         """
-        del condition
         r, m_out = inputs[0], inputs[1]
         p_in = condition[0]
 
@@ -499,8 +497,8 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         det_phi = 2 * pi
 
         # get t_min and max
-        cos_min = (-1.0) * torch.ones_like(p1)
-        cos_max = (+1.0) * torch.ones_like(p1)
+        cos_min = (-1.0) * torch.ones_like(s)
+        cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
         (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
