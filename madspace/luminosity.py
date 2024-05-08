@@ -147,6 +147,8 @@ class Luminosity(_Luminosity):
     """
     Implement luminosity mapping as suggested in
         [1] https://freidok.uni-freiburg.de/data/154629
+        [2] https://arxiv.org/abs/hep-ph/0206070v2
+        [3] https://arxiv.org/abs/hep-ph/0008033
 
     which aims to smooth the overall 1/s dependency of the
     partonic cross section (due to the flux factor)
@@ -155,9 +157,9 @@ class Luminosity(_Luminosity):
     In contrast to [1] we also allow for an tau_max (or s_max)
     to potentially split up the luminosity integral into different regions
     as been done by MG5. Then, we use the massless mapping as suggested
-    in [1-3] and [4]. This slightly alters the map as:
+    in [1-3]. This slightly alters the map as:
 
-        [1:lumi]
+        [1:lumi] Eq.(H.5)
             tau = tau_min ** r1
         [1-3:massless]
             tau = tau_max ** r1 * tau_min ** (1-r1)
