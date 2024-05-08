@@ -280,7 +280,7 @@ class DiagramMapping(PhaseSpaceMapping):
                 s_max = (sqrt_s_hat[:, None] - sum(sqrt_s) - sum(sqrt_s_min[i+1:])) ** 2
                 (s, ), jac = next(invariant_iter).map([rand()], condition=[s_min, s_max])
                 sqrt_s.append(s[:, 0].sqrt())
-                ps_weight *= jac[:, 0]
+                ps_weight *= jac
 
         # sample s-invariants from the t-channel part of the diagram
         sqrt_s_min = sqrt_s[0][:, None]
@@ -291,7 +291,7 @@ class DiagramMapping(PhaseSpaceMapping):
             (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
             sqrt_s_min = s.sqrt()
             cumulated_sqrt_s.append(sqrt_s_min)
-            ps_weight *= jac[:, 0]
+            ps_weight *= jac
 
         # sample t-invariants and build momenta of t-channel part of the diagram
         k_t = []

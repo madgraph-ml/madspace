@@ -141,7 +141,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Then boost into hadronic lab frame
         p_ext_lab = boost_beam(p_ext, rap)
-        ps_weight = det_lumi * det_s12[:,0] * det_t1 * det_decay
+        ps_weight = det_lumi * det_s12 * det_t1 * det_decay
 
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
@@ -355,7 +355,7 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Then boost into hadronic lab frame
         p_ext_lab = boost_beam(p_ext, rap)
-        ps_weight = det_lumi * det_s12[:,0] * det_s123[:,0] * det_t1 * det_t2 * det_t3
+        ps_weight = det_lumi * det_s12 * det_s123 * det_t1 * det_t2 * det_t3
 
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 

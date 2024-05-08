@@ -13,7 +13,6 @@ def print_info(diagram):
     print("s vertices", diagram.s_channel_vertices)
     print("s lines   ", diagram.s_channel_lines)
     print("min sqrt s", [line.sqrt_s_min for line in diagram.s_channel_lines])
-    print(diagram.s_decay_layers)
 
 
 print("====== VBS ======")
@@ -42,10 +41,10 @@ vbs = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3, out4], vertices=[
 dmap = DiagramMapping(vbs, torch.tensor(13000.**2))
 (p_auto, x_auto), jac_auto = dmap.map([r])
 
+print_info(vbs)
 print(p_auto - p_hand)
 print(x_auto - x_hand)
 print(jac_auto - jac_hand)
-print_info(vbs)
 
 print()
 print("====== WWW ======")
