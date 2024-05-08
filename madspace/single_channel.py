@@ -18,6 +18,7 @@ from .twoparticle import (
 )
 from .luminosity import Luminosity
 from .invariants import BreitWignerInvariantBlock, UniformInvariantBlock
+from icecream import ic
 
 
 class SingleChannelWWW(PhaseSpaceMapping):
@@ -118,8 +119,8 @@ class SingleChannelWWW(PhaseSpaceMapping):
         p_in = torch.stack([p1, p2], dim=1)
 
         # Sample k12 propagator
-        s12_min = (2 * self.mw) ** 2 * torch.ones_like(s_hat)
-        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        s12_min = (2 * self.mw) ** 2 * torch.ones_like(r_s12)
+        s12_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (s12,), det_s12 = self.s12.map([r_s12], condition=[s12_min, s12_max])
 
         # get masses/virtualities
@@ -181,9 +182,9 @@ class SingleChannelWWW(PhaseSpaceMapping):
         (r_t1, _), det_t1_inv = self.t1.map_inverse([k12k3], condition=[p_in])
 
         # Undo s-channel sampling
-        s12 = lsquare(k12)
+        s12 = lsquare(k12)[:, None]
         s12_min = torch.zeros_like(s12)
-        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        s12_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (r_s12,), det_s12_inv = self.s12.map_inverse(
             [s12], condition=[s12_min, s12_max]
         )
@@ -287,6 +288,7 @@ class SingleChannelVBS(PhaseSpaceMapping):
             x1x2 (Tensor): pdf fractions with shape=(b,2)
             det (Tensor): log det of mapping with shape=(b,)
         """
+        del condition
         # Unpack random numbers
         r = inputs[0]
         r_lumi = r[:, :2]  # 2 dof
@@ -312,11 +314,11 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Sample s-invariants
         s12_min = torch.ones_like(rap) * self.mw**2
-        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        s12_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (s12,), det_s12 = self.s12.map([r_s12], condition=[s12_min, s12_max])
 
         s123_min = s12
-        s123_max = (sqrt(s_hat) - self.mw) ** 2
+        s123_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (s123,), det_s123 = self.s123.map([r_s123], condition=[s123_min, s123_max])
 
         # Then do t-invariant maps
@@ -401,16 +403,16 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Undo s invariants
         # Sample s-invariants
-        s12 = lsquare(k12)
-        s12_min = torch.ones_like(rap) * self.mw**2
-        s12_max = (sqrt(s_hat) - self.mw) ** 2
+        s12 = lsquare(k12)[:, None]
+        s12_min = torch.ones_like(s12) * self.mw**2
+        s12_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (r_s12,), det_s12_inv = self.s12.map_inverse(
             [s12], condition=[s12_min, s12_max]
         )
 
-        s123 = lsquare(k123)
+        s123 = lsquare(k123)[:, None]
         s123_min = s12
-        s123_max = (sqrt(s_hat) - self.mw) ** 2
+        s123_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (r_s123,), det_s123_inv = self.s123.map_inverse(
             [s123], condition=[s123_min, s123_max]
         )
