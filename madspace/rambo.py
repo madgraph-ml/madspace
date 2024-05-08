@@ -1,10 +1,7 @@
-import numpy as np
 from typing import Optional, Tuple
 from math import gamma, pi
 import torch
-from torch import Tensor, arctanh, exp, sqrt, log, atan2
-import torch.functional as F
-import sys
+from torch import Tensor, sqrt, log, atan2
 
 from .rootfinder.roots import get_u_parameter, get_xi_parameter
 
@@ -52,12 +49,23 @@ class Rambo(PhaseSpaceMapping):
         dims_out = [(nparticles, 4)]
         super().__init__(dims_in, dims_out)
 
-    def map(self, inputs: TensorList, condition: TensorList = None):
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, e_cm]
+                r: random numbers with shape=(b,4*n)
+                e_cm: COM energy with shape=(b,) or shape=()
+
+        Returns:
+            p_ext (Tensor): external momenta with shape=(b,n+2,4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
         del condition
         r = inputs[0]  # has dims (b,4*n)
         e_cm = inputs[1]  # has dims (b,) or ()
 
-        # reshape random numbers to future shape (b,n,4)
+        # reshape random numbers to future shape=(b,n,4)
         r = r.reshape((-1, self.nparticles, 4))
 
         # Check if the partonic COM energy is large enough
@@ -78,31 +86,42 @@ class Rambo(PhaseSpaceMapping):
         x = e_cm / M  # has shape (b,1)
 
         # Boost and refactor
-        p = boost(q, Q, inverse=True)
-        p = x[..., None] * p
+        p_out = boost(q, Q, inverse=True)
+        p_out = x[..., None] * p_out
 
         torch_ones = torch.ones((r.shape[0],))
         w0 = torch_ones * self._massles_weight(e_cm)
+
+        # construct initial state momenta
+        p1 = torch.zeros((r.shape[0], 4))
+        p2 = torch.zeros((r.shape[0], 4))
+        p1[:, 0] = e_cm / 2
+        p1[:, 3] = e_cm / 2
+        p2[:, 0] = e_cm / 2
+        p2[:, 3] = e_cm / 2
+        p_in = torch.stack([p1, p2], dim=1)
 
         if self.masses is not None:
             # match dimensions of masses
             m = self.masses[None, ...]
 
             # solve for xi in massive case, see Ref. [1]
-            xi = get_xi_parameter(p[:, :, 0], m)
+            xi = get_xi_parameter(p_out[:, :, 0], m)
 
             # Make momenta massive
             xi = xi[:, None, None]
-            k = torch.ones_like(p)
-            k[:, :, 0] = torch.sqrt(m**2 + xi[:, :, 0] ** 2 * p[:, :, 0] ** 2)
-            k[:, :, 1:] = xi * p[:, :, 1:]
+            k_out = torch.ones_like(p_out)
+            k_out[:, :, 0] = torch.sqrt(m**2 + xi[:, :, 0] ** 2 * p_out[:, :, 0] ** 2)
+            k_out[:, :, 1:] = xi * p_out[:, :, 1:]
 
             # Get massive density
-            w_m = self._massive_weight(k, p, xi[:, 0, 0])
+            w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
 
-            return (k,), w_m * w0
+            p_ext = torch.cat([p_in, k_out], dim=1)
+            return (p_ext,), w_m * w0
 
-        return (p,), w0
+        p_ext = torch.cat([p_in, p_out], dim=1)
+        return (p_ext,), w0
 
     def map_inverse(self, inputs, condition=None):
         """Does not exist for Rambo"""
@@ -185,7 +204,18 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         super().__init__(dims_in, dims_out)
 
-    def map(self, inputs: TensorList, condition: TensorList = None):
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, e_cm]
+                r: random numbers with shape=(b,3*n-4)
+                e_cm: COM energy with shape=(b,) or shape=()
+
+        Returns:
+            p_ext (Tensor): external momenta with shape=(b,n+2,4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
         del condition
         r = inputs[0]  # has dims (b,3*n-4)
         e_cm = inputs[1]  # has dims (b,) or ()
@@ -200,7 +230,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         # Do rambo on diet loop
         # prepare momenta
-        p = torch.empty((r.shape[0], self.nparticles, 4))
+        p_out = torch.empty((r.shape[0], self.nparticles, 4))
 
         # split random numbers in energy and angular
         ru, romega = r[:, : self.nparticles - 2], r[:, self.nparticles - 2 :]
@@ -239,40 +269,62 @@ class RamboOnDiet(PhaseSpaceMapping):
             Q_i = torch.concat([Q0_i[:, None], Qp_i], dim=1)
 
             # Boost p_i and Q_i along Q
-            p[:, i] = boost(pnm1[:, i], Q)
+            p_out[:, i] = boost(pnm1[:, i], Q)
             Q = boost(Q_i, Q)
 
         # Define final particle
-        p[:, self.nparticles - 1] = Q
+        p_out[:, self.nparticles - 1] = Q
 
         # Get massless phase-space weights
         torch_ones = torch.ones((r.shape[0],))
         w0 = torch_ones * self._massles_weight(e_cm)
 
+        # construct initial state momenta
+        p1 = torch.zeros((r.shape[0], 4))
+        p2 = torch.zeros((r.shape[0], 4))
+        p1[:, 0] = e_cm / 2
+        p1[:, 3] = e_cm / 2
+        p2[:, 0] = e_cm / 2
+        p2[:, 3] = e_cm / 2
+        p_in = torch.stack([p1, p2], dim=1)
+
         if self.masses is not None:
-            k = torch.empty((r.shape[0], self.nparticles, 4))
             # match dimensions of masses
             m = self.masses[None, ...]
 
             # solve for xi in massive case, see Ref. [1]
-            xi = get_xi_parameter(p[:, :, 0], m)
+            xi = get_xi_parameter(p_out[:, :, 0], m)
 
             # Make momenta massive
             xi = xi[:, None, None]
-            k = torch.ones_like(p)
-            k[:, :, 0] = sqrt(m**2 + xi[:, :, 0] ** 2 * p[:, :, 0] ** 2)
-            k[:, :, 1:] = xi * p[:, :, 1:]
+            k_out = torch.empty_like(p_out)
+            k_out[:, :, 0] = sqrt(m**2 + xi[:, :, 0] ** 2 * p_out[:, :, 0] ** 2)
+            k_out[:, :, 1:] = xi * p_out[:, :, 1:]
 
             # Get massive density corr. factor
-            w_m = self._massive_weight(k, p, xi[:, 0, 0])
+            w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
 
-            return (k,), w_m * w0
+            p_ext = torch.cat([p_in, k_out], dim=1)
+            return (p_ext,), w_m * w0
 
-        return (p,), w0
+        p_ext = torch.cat([p_in, p_out], dim=1)
+        return (p_ext,), w0
 
     def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_ext]
+                p_ext: external momenta with shape=(b,n+2,4)
+
+        Returns:
+            r (Tensor): random numbers with shape=(b,3*n-4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        del condition
         # Get input momenta
-        k = inputs[0]
+        p_ext = inputs[0]
+        k = p_ext[:, :-2]
         e_cm = sqrt(lsquare(k.sum(dim=1)))
         w0 = self._massles_weight(e_cm)
 
@@ -384,7 +436,6 @@ class Mahambo(PhaseSpaceMapping):
         lumi_mass: Tensor = None,
         lumi_width: Tensor = None,
         masses: list[float] = None,
-        checked_emin: bool = False,
     ):
         self.e_beam = e_beam
         self.nparticles = nparticles
@@ -418,6 +469,18 @@ class Mahambo(PhaseSpaceMapping):
         super().__init__(dims_in, dims_out)
 
     def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r]
+                r: random numbers with shape=(b,3*n-2)
+
+        Returns:
+            p_lab (Tensor): external momenta (lab frame) with shape=(b,n+2,4)
+            x1x2 (Tensor): pdf fractions with shape=(b,2)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        del condition
         r = inputs[0]
         r_lumi, r_rambo = r[:, :2], r[:, 2:]
 
@@ -436,6 +499,18 @@ class Mahambo(PhaseSpaceMapping):
         return (p_lab, x1x2), ps_weight
 
     def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_lab, x1x2]
+                p_lab: external momenta with shape=(b,n+2,4)
+                x1x2: pdf fractions with shape=(b,2)
+
+        Returns:
+            r (Tensor): random numbers with shape=(b,3*n-2)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        del condition
         p_lab = inputs[0]
         x1x2 = inputs[1]
 
