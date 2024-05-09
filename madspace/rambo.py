@@ -15,7 +15,7 @@ from .helper import (
     two_body_decay_factor,
     boost,
     boost_beam,
-    edot,
+    mass,
     esquare,
     lsquare,
 )
@@ -59,7 +59,7 @@ class Rambo(PhaseSpaceMapping):
 
         Returns:
             p_ext (Tensor): external momenta with shape=(b,n+2,4)
-            det (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         r = inputs[0]  # has dims (b,4*n)
@@ -98,7 +98,7 @@ class Rambo(PhaseSpaceMapping):
         p1[:, 0] = e_cm / 2
         p1[:, 3] = e_cm / 2
         p2[:, 0] = e_cm / 2
-        p2[:, 3] = e_cm / 2
+        p2[:, 3] = -e_cm / 2
         p_in = torch.stack([p1, p2], dim=1)
 
         if self.masses is not None:
@@ -214,7 +214,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         Returns:
             p_ext (Tensor): external momenta with shape=(b,n+2,4)
-            det (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         r = inputs[0]  # has dims (b,3*n-4)
@@ -285,7 +285,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         p1[:, 0] = e_cm / 2
         p1[:, 3] = e_cm / 2
         p2[:, 0] = e_cm / 2
-        p2[:, 3] = e_cm / 2
+        p2[:, 3] = -e_cm / 2
         p_in = torch.stack([p1, p2], dim=1)
 
         if self.masses is not None:
@@ -319,7 +319,8 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         Returns:
             r (Tensor): random numbers with shape=(b,3*n-4)
-            det (Tensor): log det of mapping with shape=(b,)
+            e_cm (Tensor): COM energy with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         # Get input momenta
@@ -375,6 +376,236 @@ class RamboOnDiet(PhaseSpaceMapping):
         # Concat angular and energy random numbers
         r = torch.cat([ru, rcos, rphi], dim=-1)
         return (r, e_cm), 1 / wm / w0
+
+    def _massles_weight(self, e_cm):
+        w0 = (
+            (pi / 2.0) ** (self.nparticles - 1)
+            * e_cm ** (2 * self.nparticles - 4)
+            / (gamma(self.nparticles) * gamma(self.nparticles - 1))
+        )
+        return w0
+
+    def _massive_weight(
+        self,
+        k: torch.Tensor,
+        p: torch.Tensor,
+        xi: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            k (torch.Tensor): massive momenta in shape=(b,n,4)
+            p (torch.Tensor): massless momenta in shape=(b,n,4)
+            xi (torch.Tensor, Optional): shift variable with shape=(b,)
+
+        Returns:
+            torch.Tensor: massive weight
+        """
+        # get correction factor for massive ones
+        ks2 = k[:, :, 1] ** 2 + k[:, :, 2] ** 2 + k[:, :, 3] ** 2
+        ps2 = p[:, :, 1] ** 2 + p[:, :, 2] ** 2 + p[:, :, 3] ** 2
+        k0 = k[:, :, 0]
+        p0 = p[:, :, 0]
+        w_M = (
+            xi ** (3 * self.nparticles - 3)
+            * torch.prod(p0 / k0, dim=1)
+            * torch.sum(ps2 / p0, dim=1)
+            / torch.sum(ks2 / k0, dim=1)
+        )
+        return w_M
+
+    def density(self, inputs, condition=None, inverse=False):
+        del condition
+        if inverse:
+            _, gs_inv = self.map_inverse(self, inputs)
+            return gs_inv
+
+        _, gs = self.map(self, inputs)
+        return gs
+
+
+class tRamboBlock(PhaseSpaceMapping):
+    """Rambo on Diet algorithm as presented in
+        [2] Rambo on diet - https://arxiv.org/abs/1308.2922
+
+    We allow for external masses as input parameter to combine this
+    as global t-channel Block with additional s-channel decays.
+    """
+
+    def __init__(
+        self,
+        nparticles: int,
+        check_emin: bool = False,
+    ):
+        self.nparticles = nparticles
+        self.check_emin = check_emin
+
+        dims_in = [(3 * nparticles - 4,), (), (nparticles,)]
+        dims_out = [(nparticles, 4)]
+
+        super().__init__(dims_in, dims_out)
+
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, e_cm, m_out]
+                r: random numbers with shape=(b,3*n-4)
+                e_cm: COM energy with shape=(b,) or shape=()
+                m_out: (virtual) masses of outgoing particles with shape=(b,n)
+
+        Returns:
+            p_ext (Tensor): external momenta with shape=(b,n+2,4)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        r = inputs[0]  # has dims (b,3*n-4)
+        e_cm = inputs[1]  # has dims (b,) or ()
+        m_out = inputs[2]  # has dims (b,n)
+
+        # Check if the partonic COM energy is large enough
+        # Only for debugging, maybe remove later
+        with torch.no_grad():
+            if self.check_emin:
+                e_min = m_out.sum(dim=1)
+                if torch.any(e_cm <= e_min):
+                    raise ValueError(
+                        f"partonic COM energy needs to be larger than sum of external masses!"
+                    )
+
+        # Do rambo on diet loop
+        # prepare momenta
+        p_out = torch.empty((r.shape[0], self.nparticles, 4))
+
+        # split random numbers in energy and angular
+        ru, romega = r[:, : self.nparticles - 2], r[:, self.nparticles - 2 :]
+
+        # Solve rambo equation numerically for all u directly
+        # u has shape=(b, nparticles - 2)
+        u = get_u_parameter(ru)
+
+        # split into rcos and rphi
+        rcos, rphi = romega.split(self.nparticles - 1, dim=1)
+
+        # Define all angles vectorized
+        cos_theta = 2 * rcos - 1
+        phi = 2 * pi * rphi
+
+        # Define intermediate masses
+        M = torch.zeros((r.shape[0], self.nparticles))
+        M[:, 0] = e_cm
+        M[:, 1:-1] = torch.cumprod(u, dim=1) * e_cm
+
+        # Define first n-1 energies
+        # gets shape (b, nparticles - 1)
+        q = 4 * M[:, :-1] * two_body_decay_factor(M[:, :-1], M[:, 1:], 0)
+
+        # Define first (n-1) particles
+        pnm1 = map_fourvector_rambo_diet(q, cos_theta, phi)
+
+        # Define Qs
+        Q = e_cm * torch.tile(torch.tensor([1, 0, 0, 0]), (r.shape[0], 1))
+
+        # Define loop over (n-1 particles) boosts
+        for i in range(self.nparticles - 1):
+            # Define Qi
+            Q0_i = sqrt(q[:, i] ** 2 + M[:, i + 1] ** 2)
+            Qp_i = -pnm1[:, i, 1:]
+            Q_i = torch.concat([Q0_i[:, None], Qp_i], dim=1)
+
+            # Boost p_i and Q_i along Q
+            p_out[:, i] = boost(pnm1[:, i], Q)
+            Q = boost(Q_i, Q)
+
+        # Define final particle
+        p_out[:, self.nparticles - 1] = Q
+
+        # Get massless phase-space weights
+        torch_ones = torch.ones((r.shape[0],))
+        w0 = torch_ones * self._massles_weight(e_cm)
+
+        # construct initial state momenta
+        p1 = torch.zeros((r.shape[0], 4))
+        p2 = torch.zeros((r.shape[0], 4))
+        p1[:, 0] = e_cm / 2
+        p1[:, 3] = e_cm / 2
+        p2[:, 0] = e_cm / 2
+        p2[:, 3] = -e_cm / 2
+        p_in = torch.stack([p1, p2], dim=1)
+
+        # solve for xi in massive case, see Ref. [1]
+        xi = get_xi_parameter(p_out[:, :, 0], m_out)
+
+        # Make momenta massive
+        xi = xi[:, None, None]
+        k_out = torch.empty_like(p_out)
+        k_out[:, :, 0] = sqrt(m_out**2 + xi[:, :, 0] ** 2 * p_out[:, :, 0] ** 2)
+        k_out[:, :, 1:] = xi * p_out[:, :, 1:]
+
+        # Get massive density corr. factor
+        w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
+
+        p_ext = torch.cat([p_in, k_out], dim=1)
+        return (p_ext,), w_m * w0
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_ext]
+                p_ext: external momenta with shape=(b,n+2,4)
+
+        Returns:
+            r (Tensor): random numbers with shape=(b,3*n-4)
+            e_cm (Tensor): COM energy with shape=(b,)
+            m_out (Tensor): (virtual) masses of outgoing particles with shape=(b,n)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        # Get input momenta
+        p_ext = inputs[0]
+        k = p_ext[:, :-2]
+        e_cm = sqrt(lsquare(k.sum(dim=1)))
+        m_out = mass(k)  # has shape (b,n)
+        w0 = self._massles_weight(e_cm)
+
+        # Make momenta massless before going back to random numbers
+        p = torch.empty((k.shape[0], self.nparticles, 4))
+        # solve for xi in massive case, see Ref. [1], here analytic result possible!
+        xi = torch.sum(sqrt(k[:, :, 0] ** 2 - m_out**2), dim=-1) / e_cm
+
+        # Make them massless
+        xi = xi[:, None, None]
+        p[:, :, 0] = torch.sqrt(k[:, :, 0] ** 2 - m_out**2) / xi[:, :, 0]
+        p[:, :, 1:] = k[:, :, 1:] / xi
+        wm = self._massive_weight(k, p, xi[:, 0, 0])
+
+        # Get random numbers associated to the intermediate masses
+        # have shapees (b, n-1)
+        P = torch.cumsum(p.flip(1), dim=1)[:, 1:]  # has shape (b, n-1)
+        M = sqrt(lsquare(P))
+        # have shapes (b, n-2)
+        um = (M[:, :-1] / M[:, 1:]).flip(1)
+        iarray = torch.arange(2, self.nparticles)[None, :]
+        uc = self.nparticles + 1 - iarray
+        uexp = 2 * (self.nparticles - iarray)
+        ru = uc * um**uexp - (uc - 1) * um ** (uexp + 2)
+
+        # Get the angles in correct frames
+        # Here: do all boosts in one go
+        Q = P.flip(1)
+        romega = torch.empty((k.shape[0], 2 * self.nparticles - 2))
+        p_prime = boost(p[:, :-1], Q, inverse=True)
+        pmag = sqrt(esquare(p_prime[..., 1:]))
+        costheta = p_prime[..., 3] / pmag
+        phi = atan2(p_prime[..., 2], p_prime[..., 1])
+
+        # Define the random numbers
+        rcos = 0.5 * (costheta + 1.0)
+        rphi = phi / (2 * pi) + (phi < 0)
+
+        # Concat angular and energy random numbers
+        r = torch.cat([ru, rcos, rphi], dim=-1)
+        return (r, e_cm, m_out), 1 / wm / w0
 
     def _massles_weight(self, e_cm):
         w0 = (
@@ -478,7 +709,7 @@ class Mahambo(PhaseSpaceMapping):
         Returns:
             p_lab (Tensor): external momenta (lab frame) with shape=(b,n+2,4)
             x1x2 (Tensor): pdf fractions with shape=(b,2)
-            det (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         r = inputs[0]
@@ -508,7 +739,7 @@ class Mahambo(PhaseSpaceMapping):
 
         Returns:
             r (Tensor): random numbers with shape=(b,3*n-2)
-            det (Tensor): log det of mapping with shape=(b,)
+            det (Tensor): det of mapping with shape=(b,)
         """
         del condition
         p_lab = inputs[0]
