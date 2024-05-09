@@ -159,7 +159,6 @@ class ThreeParticleCOM(PhaseSpaceMapping):
 
         # get p1/2 absolute momentum
         p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))
-        p2mag = sqrt(edot(p2[:, 1:], p2[:, 1:]))
 
         # Extract phi and theta
         costheta = p1[:, 3] / p1mag
@@ -337,7 +336,6 @@ class ThreeParticleLAB(PhaseSpaceMapping):
 
         # get p1/2 absolute momentum
         p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))
-        p2mag = sqrt(edot(p2[:, 1:], p2[:, 1:]))
 
         # Extract phi and theta
         costheta = p1[:, 3] / p1mag

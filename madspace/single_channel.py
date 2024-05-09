@@ -116,8 +116,8 @@ class SingleChannelWWW(PhaseSpaceMapping):
         rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
 
         # construct initial state momenta
-        p1 = torch.zeros((r_t1.shape[0], 4))
-        p2 = torch.zeros((r_t1.shape[0], 4))
+        p1 = torch.zeros((r_t1.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r_t1.shape[0], 4), device=r.device)
         p1[:, 0] = sqrt(s_hat) / 2
         p1[:, 3] = sqrt(s_hat) / 2
         p2[:, 0] = sqrt(s_hat) / 2
@@ -310,8 +310,8 @@ class SingleChannelVBS(PhaseSpaceMapping):
         rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
 
         # construct initial state momenta
-        p1 = torch.zeros((r_t1.shape[0], 4))
-        p2 = torch.zeros((r_t1.shape[0], 4))
+        p1 = torch.zeros((r_t1.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r_t1.shape[0], 4), device=r.device)
         p1[:, 0] = sqrt(s_hat) / 2
         p1[:, 3] = sqrt(s_hat) / 2
         p2[:, 0] = sqrt(s_hat) / 2
@@ -563,13 +563,13 @@ class Diagramm_ww_llvv(PhaseSpaceMapping):
             s_hat = self.s_lab * x1x2.prod(dim=1)
             rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
         else:
-            s_hat = self.s_lab * torch.ones((r_s12.shape[0],))
+            s_hat = self.s_lab * torch.ones((r_s12.shape[0],), device=r.device)
             det_lumi = 1.0
-            x1x2 = torch.ones(r_s12.shape[0], 2)
+            x1x2 = torch.ones((r_s12.shape[0], 2), device=r.device)
 
         # construct initial state momenta
-        p1 = torch.zeros((r_s12.shape[0], 4))
-        p2 = torch.zeros((r_s12.shape[0], 4))
+        p1 = torch.zeros((r_s12.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r_s12.shape[0], 4), device=r.device)
         p1[:, 0] = sqrt(s_hat) / 2
         p1[:, 3] = sqrt(s_hat) / 2
         p2[:, 0] = sqrt(s_hat) / 2
@@ -756,13 +756,13 @@ class Diagramm_llvvA(PhaseSpaceMapping):
             s_hat = self.s_lab * x1x2.prod(dim=1)
             rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
         else:
-            s_hat = self.s_lab * torch.ones((r_s23.shape[0],))
+            s_hat = self.s_lab * torch.ones((r_s23.shape[0],), device=r.device)
             det_lumi = 1.0
-            x1x2 = torch.ones(r_s23.shape[0], 2)
+            x1x2 = torch.ones((r_s23.shape[0], 2), device=r.device)
 
         # construct initial state momenta
-        p1 = torch.zeros((r_s23.shape[0], 4))
-        p2 = torch.zeros((r_s23.shape[0], 4))
+        p1 = torch.zeros((r_s23.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r_s23.shape[0], 4), device=r.device)
         p1[:, 0] = sqrt(s_hat) / 2
         p1[:, 3] = sqrt(s_hat) / 2
         p2[:, 0] = sqrt(s_hat) / 2

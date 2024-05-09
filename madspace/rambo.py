@@ -89,12 +89,12 @@ class Rambo(PhaseSpaceMapping):
         p_out = boost(q, Q, inverse=True)
         p_out = x[..., None] * p_out
 
-        torch_ones = torch.ones((r.shape[0],))
+        torch_ones = torch.ones((r.shape[0],), device=r.device)
         w0 = torch_ones * self._massles_weight(e_cm)
 
         # construct initial state momenta
-        p1 = torch.zeros((r.shape[0], 4))
-        p2 = torch.zeros((r.shape[0], 4))
+        p1 = torch.zeros((r.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r.shape[0], 4), device=r.device)
         p1[:, 0] = e_cm / 2
         p1[:, 3] = e_cm / 2
         p2[:, 0] = e_cm / 2
@@ -103,14 +103,14 @@ class Rambo(PhaseSpaceMapping):
 
         if self.masses is not None:
             # match dimensions of masses
-            m = self.masses[None, ...]
+            m = self.masses[None, ...].to(device=r.device)
 
             # solve for xi in massive case, see Ref. [1]
             xi = get_xi_parameter(p_out[:, :, 0], m)
 
             # Make momenta massive
             xi = xi[:, None, None]
-            k_out = torch.ones_like(p_out)
+            k_out = torch.empty_like(p_out)
             k_out[:, :, 0] = torch.sqrt(m**2 + xi[:, :, 0] ** 2 * p_out[:, :, 0] ** 2)
             k_out[:, :, 1:] = xi * p_out[:, :, 1:]
 
@@ -186,10 +186,10 @@ class RamboOnDiet(PhaseSpaceMapping):
         self,
         nparticles: int,
         masses: list[float] = None,
-        checked_emin: bool = False,
+        check_emin: bool = False,
     ):
         self.nparticles = nparticles
-        self.checked_emin = checked_emin
+        self.check_emin = check_emin
 
         if masses is not None:
             self.masses = torch.tensor(masses)
@@ -222,7 +222,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         # Check if the partonic COM energy is large enough
         with torch.no_grad():
-            if not self.checked_emin:
+            if self.check_emin:
                 if torch.any(e_cm <= self.e_min):
                     raise ValueError(
                         f"partonic COM energy needs to be larger than sum of external masses!"
@@ -230,7 +230,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         # Do rambo on diet loop
         # prepare momenta
-        p_out = torch.empty((r.shape[0], self.nparticles, 4))
+        p_out = torch.empty((r.shape[0], self.nparticles, 4), device=r.device)
 
         # split random numbers in energy and angular
         ru, romega = r[:, : self.nparticles - 2], r[:, self.nparticles - 2 :]
@@ -247,7 +247,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         phi = 2 * pi * rphi
 
         # Define intermediate masses
-        M = torch.zeros((r.shape[0], self.nparticles))
+        M = torch.zeros((r.shape[0], self.nparticles), device=r.device)
         M[:, 0] = e_cm
         M[:, 1:-1] = torch.cumprod(u, dim=1) * e_cm
 
@@ -276,12 +276,12 @@ class RamboOnDiet(PhaseSpaceMapping):
         p_out[:, self.nparticles - 1] = Q
 
         # Get massless phase-space weights
-        torch_ones = torch.ones((r.shape[0],))
+        torch_ones = torch.ones((r.shape[0],), device=r.device)
         w0 = torch_ones * self._massles_weight(e_cm)
 
         # construct initial state momenta
-        p1 = torch.zeros((r.shape[0], 4))
-        p2 = torch.zeros((r.shape[0], 4))
+        p1 = torch.zeros((r.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r.shape[0], 4), device=r.device)
         p1[:, 0] = e_cm / 2
         p1[:, 3] = e_cm / 2
         p2[:, 0] = e_cm / 2
@@ -290,7 +290,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         if self.masses is not None:
             # match dimensions of masses
-            m = self.masses[None, ...]
+            m = self.masses[None, ...].to(device=r.device)
 
             # solve for xi in massive case, see Ref. [1]
             xi = get_xi_parameter(p_out[:, :, 0], m)
@@ -330,7 +330,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         w0 = self._massles_weight(e_cm)
 
         # Make momenta massless before going back to random numbers
-        p = torch.empty((k.shape[0], self.nparticles, 4))
+        p = torch.empty((k.shape[0], self.nparticles, 4), device=p_ext.device)
         if self.masses is not None:
             # Define masses
             m = self.masses[None, ...]
@@ -355,7 +355,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         M = sqrt(lsquare(P))
         # have shapes (b, n-2)
         um = (M[:, :-1] / M[:, 1:]).flip(1)
-        iarray = torch.arange(2, self.nparticles)[None, :]
+        iarray = torch.arange(2, self.nparticles, device=p.device)[None, :]
         uc = self.nparticles + 1 - iarray
         uexp = 2 * (self.nparticles - iarray)
         ru = uc * um**uexp - (uc - 1) * um ** (uexp + 2)
@@ -363,7 +363,6 @@ class RamboOnDiet(PhaseSpaceMapping):
         # Get the angles in correct frames
         # Here: do all boosts in one go
         Q = P.flip(1)
-        romega = torch.empty((k.shape[0], 2 * self.nparticles - 2))
         p_prime = boost(p[:, :-1], Q, inverse=True)
         pmag = sqrt(esquare(p_prime[..., 1:]))
         costheta = p_prime[..., 3] / pmag
@@ -474,7 +473,7 @@ class tRamboBlock(PhaseSpaceMapping):
 
         # Do rambo on diet loop
         # prepare momenta
-        p_out = torch.empty((r.shape[0], self.nparticles, 4))
+        p_out = torch.empty((r.shape[0], self.nparticles, 4), device=r.device)
 
         # split random numbers in energy and angular
         ru, romega = r[:, : self.nparticles - 2], r[:, self.nparticles - 2 :]
@@ -520,12 +519,12 @@ class tRamboBlock(PhaseSpaceMapping):
         p_out[:, self.nparticles - 1] = Q
 
         # Get massless phase-space weights
-        torch_ones = torch.ones((r.shape[0],))
+        torch_ones = torch.ones((r.shape[0],), device=r.device)
         w0 = torch_ones * self._massles_weight(e_cm)
 
         # construct initial state momenta
-        p1 = torch.zeros((r.shape[0], 4))
-        p2 = torch.zeros((r.shape[0], 4))
+        p1 = torch.zeros((r.shape[0], 4), device=r.device)
+        p2 = torch.zeros((r.shape[0], 4), device=r.device)
         p1[:, 0] = e_cm / 2
         p1[:, 3] = e_cm / 2
         p2[:, 0] = e_cm / 2
@@ -569,7 +568,7 @@ class tRamboBlock(PhaseSpaceMapping):
         w0 = self._massles_weight(e_cm)
 
         # Make momenta massless before going back to random numbers
-        p = torch.empty((k.shape[0], self.nparticles, 4))
+        p = torch.empty((k.shape[0], self.nparticles, 4), device=p_ext.device)
         # solve for xi in massive case, see Ref. [1], here analytic result possible!
         xi = torch.sum(sqrt(k[:, :, 0] ** 2 - m_out**2), dim=-1) / e_cm
 
@@ -585,7 +584,7 @@ class tRamboBlock(PhaseSpaceMapping):
         M = sqrt(lsquare(P))
         # have shapes (b, n-2)
         um = (M[:, :-1] / M[:, 1:]).flip(1)
-        iarray = torch.arange(2, self.nparticles)[None, :]
+        iarray = torch.arange(2, self.nparticles, device=p.device)[None, :]
         uc = self.nparticles + 1 - iarray
         uexp = 2 * (self.nparticles - iarray)
         ru = uc * um**uexp - (uc - 1) * um ** (uexp + 2)
@@ -593,7 +592,6 @@ class tRamboBlock(PhaseSpaceMapping):
         # Get the angles in correct frames
         # Here: do all boosts in one go
         Q = P.flip(1)
-        romega = torch.empty((k.shape[0], 2 * self.nparticles - 2))
         p_prime = boost(p[:, :-1], Q, inverse=True)
         pmag = sqrt(esquare(p_prime[..., 1:]))
         costheta = p_prime[..., 3] / pmag
@@ -695,7 +693,7 @@ class Mahambo(PhaseSpaceMapping):
         else:
             self.luminosity = FlatLuminosity(self.s_lab, self.shat_min, self.shat_max)
 
-        self.rambo = RamboOnDiet(nparticles, masses, checked_emin=True)
+        self.rambo = RamboOnDiet(nparticles, masses, check_emin=False)
 
         super().__init__(dims_in, dims_out)
 
@@ -755,13 +753,131 @@ class Mahambo(PhaseSpaceMapping):
         p_com = boost_beam(p_lab, rap, inverse=True)
 
         # Get rambo random numbers
-        (r_rambo,), w_rambo_inv = self.rambo.map_inverse([p_com])
+        (r_rambo, _), w_rambo_inv = self.rambo.map_inverse([p_com])
 
         # pack all together and get full weight
         r = torch.concat([r_lumi, r_rambo], dim=1)
         inv_ps_weight = w_rambo_inv * det_lumi_inv
 
         return (r,), inv_ps_weight
+
+    def density(self, inputs, condition=None, inverse=False):
+        del condition
+        if inverse:
+            _, gs_inv = self.map_inverse(self, inputs)
+            return gs_inv
+
+        _, gs = self.map(self, inputs)
+        return gs
+
+
+class tMahamboBlock(PhaseSpaceMapping):
+    """
+    (Massive) RamboOnDiet including luminosity sampling
+    for hadron colliders.
+
+    We allow for external masses as input parameter to combine this
+    as global t-channel Block with additional s-channel decays.
+    """
+
+    def __init__(
+        self,
+        e_beam: float,
+        nparticles: int,
+        e_hat_min: float,
+        lumi_func: str = "non-resonant",
+        lumi_mass: Tensor = None,
+        lumi_width: Tensor = None,
+    ):
+        self.e_beam = e_beam
+        self.nparticles = nparticles
+
+        dims_in = [(3 * nparticles - 2,)]
+        dims_out = [(nparticles, 4), (2,)]
+
+        self.s_lab = torch.tensor(4 * e_beam**2)
+        self.shat_min = torch.tensor(e_hat_min**2)
+        self.shat_max = self.s_lab
+
+        if lumi_func == "non-resonant":
+            self.luminosity = Luminosity(self.s_lab, self.shat_min, self.shat_max)
+        elif lumi_func == "resonant":
+            self.luminosity = ResonantLuminosity(
+                self.s_lab, lumi_mass, lumi_width, self.shat_min, self.shat_max
+            )
+        else:
+            self.luminosity = FlatLuminosity(self.s_lab, self.shat_min, self.shat_max)
+
+        self.rambo = tRamboBlock(nparticles, check_emin=False)
+
+        super().__init__(dims_in, dims_out)
+
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, m_out]
+                r: random numbers with shape=(b,3*n-2)
+                m_out: (virtual) masses of outgoing particles with shape=(b,n)
+
+        Returns:
+            p_lab (Tensor): external momenta (lab frame) with shape=(b,n+2,4)
+            x1x2 (Tensor): pdf fractions with shape=(b,2)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        r = inputs[0]  # has dims (b,3*n-2)
+        m_out = inputs[1]  # has dims (b,n)
+        r_lumi, r_rambo = r[:, :2], r[:, 2:]
+
+        # Get x1 and x2
+        (x1x2,), lumi_det = self.luminosity.map([r_lumi])
+
+        # Get rambo momenta
+        e_cm = sqrt(x1x2.prod(dim=1) * self.s_lab)
+        (p_com,), w_rambo = self.rambo.map([r_rambo, e_cm, m_out])
+
+        # Get output momenta an full ps-weight
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]  # needs shape (b,1)
+        p_lab = boost_beam(p_com, rap)
+        ps_weight = lumi_det * w_rambo
+
+        return (p_lab, x1x2), ps_weight
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_lab, x1x2]
+                p_lab: external momenta with shape=(b,n+2,4)
+                x1x2: pdf fractions with shape=(b,2)
+
+        Returns:
+            r (Tensor): random numbers with shape=(b,3*n-2)
+            m_out (Tensor): (virtual) masses of outgoing particles with shape=(b,n)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        p_lab = inputs[0]
+        x1x2 = inputs[1]
+
+        # Get rapidities
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
+
+        # Get lumi rands
+        (r_lumi,), det_lumi_inv = self.luminosity.map_inverse([x1x2])
+
+        # boost into com frame
+        p_com = boost_beam(p_lab, rap, inverse=True)
+
+        # Get rambo random numbers
+        (r_rambo, _, m_out), w_rambo_inv = self.rambo.map_inverse([p_com])
+
+        # pack all together and get full weight
+        r = torch.concat([r_lumi, r_rambo], dim=1)
+        inv_ps_weight = w_rambo_inv * det_lumi_inv
+
+        return (r, m_out), inv_ps_weight
 
     def density(self, inputs, condition=None, inverse=False):
         del condition

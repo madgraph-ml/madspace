@@ -54,7 +54,7 @@ class tChiliBlock(PhaseSpaceMapping):
             det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
-        r, s, m_out = inputs[0], inputs[1], inputs[3]
+        r, s, m_out = inputs[0], inputs[1], inputs[2]
         rts = sqrt(s)
         p_nm1 = torch.zeros(r.shape[0], self.nout - 1, 4, device=r.device)
         p_n = torch.zeros(r.shape[0], 1, 4, device=r.device)
