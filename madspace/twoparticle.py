@@ -8,6 +8,7 @@
 from typing import Tuple, Optional
 import torch
 from torch import Tensor, sqrt, log, atan2
+from icecream import ic
 
 from .base import PhaseSpaceMapping, TensorList
 from .helper import (
@@ -57,7 +58,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
             det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
-        r, s, m_out = inputs[0], inputs[1], inputs[3]
+        r, s, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         p2 = torch.zeros(r.shape[0], 4, device=r.device)
         if torch.any(s < 0):
@@ -342,7 +343,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
-        (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
+        (t,), det_t = self.t_map.map([r2], condition=[tmax.abs(), tmin.abs()])
 
         # Map from t to cos_theta (needs -t as it samples |t|)
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
@@ -409,7 +410,9 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         # Get the random numbers
         r1 = phi / 2 / pi
         det_phi_inv = 1 / (2 * pi)
-        (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
+        (r2,), det_t_inv = self.t_map.map_inverse(
+            [t.abs()], condition=[tmax.abs(), tmin.abs()]
+        )
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta
@@ -501,7 +504,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
-        (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
+        (t,), det_t = self.t_map.map([r2], condition=[tmax.abs(), tmin.abs()])
 
         # Map from t to cos_theta (needs -t as it samples |t|)
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
@@ -571,7 +574,9 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         # Get the random numbers
         r1 = phi / 2 / pi
         det_phi_inv = 1 / (2 * pi)
-        (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
+        (r2,), det_t_inv = self.t_map.map_inverse(
+            [t.abs()], condition=[tmax.abs(), tmin.abs()]
+        )
         r = torch.stack([r1, r2], dim=1)
 
         # get the density and output momenta

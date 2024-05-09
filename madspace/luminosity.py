@@ -23,14 +23,14 @@ def r2tau_to_x1x2(r2: Tensor, tau: Tensor) -> Tuple[TensorTuple, Tensor]:
     x1 = tau**r2
     x2 = tau ** (1 - r2)
     det = log(tau)
-    return (x1, x2), det
+    return (x1, x2), det.abs()
 
 
 def x1x2_to_r2tau(x1: Tensor, x2: Tensor) -> Tuple[TensorTuple, Tensor]:
     tau = x1 * x2
     r2 = log(x1) / log(tau)
     det = 1 / log(tau)
-    return (r2, tau), det
+    return (r2, tau), det.abs()
 
 
 class _Luminosity(PhaseSpaceMapping):
