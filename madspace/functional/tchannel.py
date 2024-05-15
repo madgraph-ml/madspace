@@ -12,7 +12,6 @@
 from typing import Tuple
 from torch import Tensor, log, atan, tan, sqrt
 from ..helper import kaellen, lsquare
-from icecream import ic
 
 
 def costheta_to_invt(

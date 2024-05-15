@@ -746,8 +746,8 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         r_s1234 = r[:, 2:3]  # 1 dof
         r_t1 = r[:, 3:5]  # 2 dof
         r_t2 = r[:, 5:7]  # 2 dof
-        r_d23 = r[:, 7:9]  # 2 dof
-        r_d234 = r[:, 9:11]  # 2 dof
+        r_d234 = r[:, 7:9]  # 2 dof
+        r_d23 = r[:, 9:11]  # 2 dof
 
         # Do luminosity and get s_hat and rapidity
         if not self.leptonic:

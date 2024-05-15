@@ -8,7 +8,6 @@
 from typing import Tuple, Optional
 import torch
 from torch import Tensor, sqrt, log, atan2
-from icecream import ic
 
 from .base import PhaseSpaceMapping, TensorList
 from .helper import (
