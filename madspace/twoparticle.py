@@ -177,7 +177,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         del condition
         r, p0, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
-        s = lsquare(p0).clip(min=1e-5)
+        s = lsquare(p0)
 
         #with torch.no_grad():
         #    if torch.any(s < 0):

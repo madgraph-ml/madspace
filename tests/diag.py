@@ -9,7 +9,7 @@ WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
-nsamples = 100
+nsamples = 3
 
 
 def print_info(diagram):
@@ -167,6 +167,7 @@ ww_llvv_map = Diagramm_ww_llvv(
 perm = [*range(2,10), 0, 1]
 r_perm = r[:, perm]
 (p_hand, x_hand), jac_hand = ww_llvv_map.map([r_perm])
+print("+++++++++++++")
 
 ww_llvv = Diagram(
     incoming=[in1, in2],
