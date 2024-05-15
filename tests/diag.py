@@ -1,5 +1,5 @@
 from madspace.diagram_mapping import *
-from madspace.single_channel import SingleChannelVBS, SingleChannelWWW, Diagramm_llvvA
+from madspace.single_channel import SingleChannelVBS, SingleChannelWWW, Diagramm_llvvA, Diagramm_ww_llvv
 from icecream import ic
 
 torch.set_default_dtype(torch.float64)
@@ -9,7 +9,7 @@ WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
-nsamples = 3000
+nsamples = 100
 
 
 def print_info(diagram):
@@ -131,6 +131,52 @@ dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2)
 (p_auto, x_auto), jac_auto = dmap.map([r])
 
 print_info(llvva)
+print("Δp max    ", (p_auto - p_hand).abs().max())
+print("Δx max    ", (x_auto - x_hand).abs().max())
+print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+
+print()
+print("====== ww_llvv ======")
+
+in1 = Line()
+in2 = Line()
+
+out1 = Line()
+out2 = Line()
+out3 = Line()
+out4 = Line()
+
+s1234 = Line(mass=MZ, width=WZ)
+s12 = Line(mass=MW, width=WW)
+s34 = Line(mass=MW, width=WW)
+
+v1 = Vertex([in1, in2, s1234])
+v2 = Vertex([s1234, s12, s34])
+v3 = Vertex([s12, out1, out2])
+v4 = Vertex([s34, out3, out4])
+
+r = torch.rand(nsamples, 10)
+ww_llvv_map = Diagramm_ww_llvv(
+    torch.tensor(13000.**2),
+    torch.tensor(MW),
+    torch.tensor(WW),
+    mV=torch.tensor(MZ),
+    wV=torch.tensor(WZ),
+    leptonic=False
+)
+perm = [*range(2,10), 0, 1]
+r_perm = r[:, perm]
+(p_hand, x_hand), jac_hand = ww_llvv_map.map([r_perm])
+
+ww_llvv = Diagram(
+    incoming=[in1, in2],
+    outgoing=[out1, out2, out3, out4],
+    vertices=[v1, v2, v3, v4]
+)
+dmap = DiagramMapping(ww_llvv, torch.tensor(13000.**2), 1.**2)
+(p_auto, x_auto), jac_auto = dmap.map([r])
+
+print_info(ww_llvv)
 print("Δp max    ", (p_auto - p_hand).abs().max())
 print("Δx max    ", (x_auto - x_hand).abs().max())
 print("Δjac max  ", (jac_auto - jac_hand).abs().max())

@@ -1,7 +1,7 @@
 """ Helper functions needed for phase-space mappings """
 
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs, atan2
+from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs, atan2, clip
 from math import pi
 
 
@@ -326,7 +326,8 @@ def mass(a: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(abs(lsquare(a)))
+    #return sqrt(abs(lsquare(a)))
+    return sqrt(clip(lsquare(a), min=0))
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
