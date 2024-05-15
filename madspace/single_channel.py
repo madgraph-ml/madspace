@@ -590,7 +590,6 @@ class Diagramm_ww_llvv(PhaseSpaceMapping):
         m12 = sqrt(s12)
         m34 = sqrt(s34)
         m_d1 = torch.cat([m12, m34], dim=1)
-        ic(s_hat, m_d1)
         (k12k34,), det_d1 = self.decay1.map([r_d1, s_hat, m_d1])
 
         # Then k12 -> k1 k2

@@ -89,95 +89,112 @@ print("Δjac max  ", (jac_auto - jac_hand).abs().max())
 print()
 print("====== llvvA ======")
 
-in1 = Line()
-in2 = Line()
+for leptonic in [False, True]:
+    print()
+    if leptonic:
+        print("------ leptonic ------")
+    else:
+        print("------ hadronic ------")
+    in1 = Line()
+    in2 = Line()
 
-out1 = Line()
-out2 = Line()
-out3 = Line()
-out4 = Line()
-out5 = Line()
+    out1 = Line()
+    out2 = Line()
+    out3 = Line()
+    out4 = Line()
+    out5 = Line()
 
-t1 = Line(mass=MW, width=WW)
-t2 = Line(mass=MW, width=WW)
-s1 = Line(mass=MZ, width=WZ)
-s2 = Line()
+    t1 = Line(mass=MW, width=WW)
+    t2 = Line(mass=MW, width=WW)
+    s1 = Line(mass=MZ, width=WZ)
+    s2 = Line()
 
-v1 = Vertex([in1, out1, t2])
-v2 = Vertex([t2, t1, s1])
-v3 = Vertex([in2, out5, t1])
-v4 = Vertex([s1, s2, out4])
-v5 = Vertex([s2, out2, out3])
+    v1 = Vertex([in1, out1, t2])
+    v2 = Vertex([t2, t1, s1])
+    v3 = Vertex([in2, out5, t1])
+    v4 = Vertex([s1, s2, out4])
+    v5 = Vertex([s2, out2, out3])
 
-r = torch.rand(nsamples, 13)
-llvva_map = Diagramm_llvvA(
-    torch.tensor(13000.**2),
-    torch.tensor(MW),
-    torch.tensor(WW),
-    mV=torch.tensor(MZ),
-    wV=torch.tensor(WZ),
-    leptonic=False,
-)
-perm = [*range(2,13), 0, 1]
-r_perm = r[:, perm]
-(p_hand, x_hand), jac_hand = llvva_map.map([r_perm])
+    r = torch.rand(nsamples, 11 if leptonic else 13)
+    llvva_map = Diagramm_llvvA(
+        torch.tensor(13000.**2),
+        torch.tensor(MW),
+        torch.tensor(WW),
+        mV=torch.tensor(MZ),
+        wV=torch.tensor(WZ),
+        leptonic=leptonic,
+    )
+    if leptonic:
+        r_perm = r
+    else:
+        perm = [*range(2,13), 0, 1]
+        r_perm = r[:, perm]
+    (p_hand, x_hand), jac_hand = llvva_map.map([r_perm])
 
-llvva = Diagram(
-    incoming=[in1, in2],
-    outgoing=[out1, out2, out3, out4, out5],
-    vertices=[v1, v2, v3, v4, v5]
-)
-dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2)
-(p_auto, x_auto), jac_auto = dmap.map([r])
+    llvva = Diagram(
+        incoming=[in1, in2],
+        outgoing=[out1, out2, out3, out4, out5],
+        vertices=[v1, v2, v3, v4, v5]
+    )
+    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic)
+    (p_auto, x_auto), jac_auto = dmap.map([r])
 
-print_info(llvva)
-print("Δp max    ", (p_auto - p_hand).abs().max())
-print("Δx max    ", (x_auto - x_hand).abs().max())
-print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+    print_info(llvva)
+    print("Δp max    ", (p_auto - p_hand).abs().max())
+    print("Δx max    ", (x_auto - x_hand).abs().max())
+    print("Δjac max  ", (jac_auto - jac_hand).abs().max())
 
 print()
 print("====== ww_llvv ======")
 
-in1 = Line()
-in2 = Line()
+for leptonic in [False, True]:
+    print()
+    if leptonic:
+        print("------ leptonic ------")
+    else:
+        print("------ hadronic ------")
+    in1 = Line()
+    in2 = Line()
 
-out1 = Line()
-out2 = Line()
-out3 = Line()
-out4 = Line()
+    out1 = Line()
+    out2 = Line()
+    out3 = Line()
+    out4 = Line()
 
-s1234 = Line(mass=MZ, width=WZ)
-s12 = Line(mass=MW, width=WW)
-s34 = Line(mass=MW, width=WW)
+    s1234 = Line(mass=MZ, width=WZ)
+    s12 = Line(mass=MW, width=WW)
+    s34 = Line(mass=MW, width=WW)
 
-v1 = Vertex([in1, in2, s1234])
-v2 = Vertex([s1234, s12, s34])
-v3 = Vertex([s12, out1, out2])
-v4 = Vertex([s34, out3, out4])
+    v1 = Vertex([in1, in2, s1234])
+    v2 = Vertex([s1234, s12, s34])
+    v3 = Vertex([s12, out1, out2])
+    v4 = Vertex([s34, out3, out4])
 
-r = torch.rand(nsamples, 10)
-ww_llvv_map = Diagramm_ww_llvv(
-    torch.tensor(13000.**2),
-    torch.tensor(MW),
-    torch.tensor(WW),
-    mV=torch.tensor(MZ),
-    wV=torch.tensor(WZ),
-    leptonic=False
-)
-perm = [*range(2,10), 0, 1]
-r_perm = r[:, perm]
-(p_hand, x_hand), jac_hand = ww_llvv_map.map([r_perm])
-print("+++++++++++++")
+    r = torch.rand(nsamples, 8 if leptonic else 10)
+    ww_llvv_map = Diagramm_ww_llvv(
+        torch.tensor(13000.**2),
+        torch.tensor(MW),
+        torch.tensor(WW),
+        mV=torch.tensor(MZ),
+        wV=torch.tensor(WZ),
+        leptonic=leptonic
+    )
+    if leptonic:
+        r_perm = r
+    else:
+        perm = [*range(2,10), 0, 1]
+        r_perm = r[:, perm]
+    (p_hand, x_hand), jac_hand = ww_llvv_map.map([r_perm])
 
-ww_llvv = Diagram(
-    incoming=[in1, in2],
-    outgoing=[out1, out2, out3, out4],
-    vertices=[v1, v2, v3, v4]
-)
-dmap = DiagramMapping(ww_llvv, torch.tensor(13000.**2), 1.**2)
-(p_auto, x_auto), jac_auto = dmap.map([r])
+    ww_llvv = Diagram(
+        incoming=[in1, in2],
+        outgoing=[out1, out2, out3, out4],
+        vertices=[v1, v2, v3, v4]
+    )
+    dmap = DiagramMapping(ww_llvv, torch.tensor(13000.**2), 1.**2, leptonic=leptonic)
+    (p_auto, x_auto), jac_auto = dmap.map([r])
 
-print_info(ww_llvv)
-print("Δp max    ", (p_auto - p_hand).abs().max())
-print("Δx max    ", (x_auto - x_hand).abs().max())
-print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+    print_info(ww_llvv)
+    print("Δp max    ", (p_auto - p_hand).abs().max())
+    print("Δx max    ", (x_auto - x_hand).abs().max())
+    print("Δjac max  ", (jac_auto - jac_hand).abs().max())

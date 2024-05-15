@@ -272,15 +272,15 @@ class DiagramMapping(PhaseSpaceMapping):
 
         # Do luminosity and get s_hat and rapidity
         if self.leptonic:
-            s_hat = torch.ones((r_s12.shape[0],), self.s_lab, device=random.device)
+            s_hat = torch.full((random.shape[0],), self.s_lab, device=random.device)
             det_lumi = 1.0
-            x1x2 = torch.ones((r_s12.shape[0], 2), device=random.device)
+            x1x2 = torch.ones((random.shape[0], 2), device=random.device)
         else:
             (x1x2,), jac_lumi = self.luminosity.map([rand(2)])
             ps_weight *= jac_lumi
             s_hat = self.s_lab * x1x2.prod(dim=1)
-            sqrt_s_hat = s_hat.sqrt()
             rap = 0.5 * torch.log(x1x2[:, 0] / x1x2[:, 1])[:, None]
+        sqrt_s_hat = s_hat.sqrt()
 
         # construct initial state momenta
         zeros = torch.zeros_like(sqrt_s_hat)
