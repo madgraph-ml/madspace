@@ -1,7 +1,7 @@
 """ Helper functions needed for phase-space mappings """
 
 import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs, atan2
+from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, abs, atan2, clip
 from math import pi
 
 
@@ -305,7 +305,7 @@ def pmag(p: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(torch.clamp_min_(pmag2(p), EPS))
+    return sqrt(pmag2(p))
 
 
 def costheta(p: Tensor) -> Tensor:

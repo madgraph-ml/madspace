@@ -180,9 +180,9 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
 
-        with torch.no_grad():
-            if torch.any(s < 0):
-                raise ValueError(f"s needs to be always positive")
+        #with torch.no_grad():
+        #    if torch.any(s < 0):
+        #        raise ValueError(f"s needs to be always positive")
 
         r1, r2 = r[:, 0], r[:, 1]
 

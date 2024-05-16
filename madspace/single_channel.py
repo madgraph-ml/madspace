@@ -599,7 +599,7 @@ class Diagramm_ww_llvv(PhaseSpaceMapping):
 
         # Then k34 -> k3 k4
         k34 = k12k34[:, 1]
-        m3 = torch.ones_like(s12)
+        m3 = torch.zeros_like(s12)
         m4 = torch.zeros_like(s12)
         m_d3 = torch.cat([m3, m4], dim=1)
         (k3k4,), det_d3 = self.decay3.map([r_d3, k34, m_d3])
