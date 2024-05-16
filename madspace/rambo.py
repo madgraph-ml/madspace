@@ -488,7 +488,7 @@ class tRamboBlock(PhaseSpaceMapping):
         # Define intermediate masses
         M = torch.zeros((r.shape[0], self.nparticles))
         M[:, 0] = e_cm
-        M[:, 1:-1] = torch.cumprod(u, dim=1) * e_cm
+        M[:, 1:-1] = torch.cumprod(u, dim=1) * e_cm[:, None]
 
         # Define first n-1 energies
         # gets shape (b, nparticles - 1)
@@ -498,7 +498,7 @@ class tRamboBlock(PhaseSpaceMapping):
         pnm1 = map_fourvector_rambo_diet(q, cos_theta, phi)
 
         # Define Qs
-        Q = e_cm * torch.tile(torch.tensor([1, 0, 0, 0]), (r.shape[0], 1))
+        Q = e_cm[:, None] * torch.tile(torch.tensor([1, 0, 0, 0]), (r.shape[0], 1))
 
         # Define loop over (n-1 particles) boosts
         for i in range(self.nparticles - 1):

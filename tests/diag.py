@@ -9,7 +9,7 @@ WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
-nsamples = 3000
+nsamples = 3
 
 
 def print_info(diagram):
@@ -138,6 +138,16 @@ for leptonic in [False, True]:
     )
     dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic)
     (p_auto, x_auto), jac_auto = dmap.map([r])
+
+    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="rambo")
+    (p_rambo, x_rambo), jac_rambo = dmap.map([r])
+
+    if not leptonic:
+        dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="chili")
+        (p_chili, x_chili), jac_chili = dmap.map([r])
+        ic(p_auto)
+        ic(p_rambo)
+        ic(p_chili)
 
     print_info(llvva)
     print("Δp max    ", (p_auto - p_hand).abs().max())

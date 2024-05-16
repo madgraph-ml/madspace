@@ -16,6 +16,8 @@ from .luminosity import Luminosity, ResonantLuminosity
 from .invariants import (
     BreitWignerInvariantBlock, UniformInvariantBlock, MasslessInvariantBlock, StableInvariantBlock
 )
+from .rambo import tRamboBlock
+from .chili import tChiliBlock
 
 from icecream import ic
 
@@ -197,8 +199,7 @@ class tDiagramMapping(PhaseSpaceMapping):
             raise ValueError(
                 "Only vertices with 3 lines are supported in the t-channel part of the diagram"
             )
-        self.n_random = 3 * n_particles - 4
-        dims_in = [(self.n_random,), (), (n_particles,)]
+        dims_in = [(3 * n_particles - 4,), (), (n_particles,)]
         dims_out = [(n_particles, 4)]
         super().__init__(dims_in, dims_out)
 
@@ -322,10 +323,25 @@ class DiagramMapping(PhaseSpaceMapping):
         self.has_t_channel = len(diagram.t_channel_lines) != 0
         self.luminosity = None
         if self.has_t_channel:
+            self.t_channel_type = t_mapping
+            n_lines_after_t = len(diagram.lines_after_t)
+            self.t_random_numbers = 3 * n_lines_after_t - 4
             if not (leptonic or t_mapping == "chili"):
                 self.luminosity = Luminosity(s_lab, s_hat_min)
             if t_mapping == "diagram":
                 self.t_mapping = tDiagramMapping(diagram)
+            elif t_mapping == "rambo":
+                self.t_mapping = tRamboBlock(n_lines_after_t)
+            elif t_mapping == "chili":
+                if leptonic:
+                    raise ValueError("chili only supports hadronic processes")
+                #TODO: allow to set ymax, ptmin
+                self.t_mapping = tChiliBlock(
+                    n_lines_after_t,
+                    ymax=torch.full((n_lines_after_t,), 4.),
+                    ptmin=torch.zeros(n_lines_after_t)
+                )
+                self.t_random_numbers += 2
             else:
                 raise ValueError(f"Unknown t-channel mapping {t_mapping}")
         elif not leptonic:
@@ -421,8 +437,12 @@ class DiagramMapping(PhaseSpaceMapping):
 
         if self.has_t_channel:
             (p_in, p_out,), jac = self.t_mapping.map([
-                rand(self.t_mapping.n_random), sqrt_s_hat, torch.cat(sqrt_s, dim=1)
+                rand(self.t_random_numbers), sqrt_s_hat, torch.cat(sqrt_s, dim=1)
             ])
+            if self.t_channel_type == "chili":
+                x1 = p_in[:, 0, 0] * 2 / sqrt_s_hat
+                x2 = p_in[:, 1, 0] * 2 / sqrt_s_hat
+                x1x2 = torch.stack([x1, x2], dim=1)
             ps_weight *= jac
             p_out = p_out.unbind(dim=1)
         else:

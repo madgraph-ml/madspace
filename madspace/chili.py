@@ -42,9 +42,9 @@ class tChiliBlock(PhaseSpaceMapping):
         """Map from random numbers to momenta
 
         Args:
-            inputs (TensorList): list of two tensors [r, s, m_out]
+            inputs (TensorList): list of two tensors [r, e_cm, m_out]
                 r: random numbers with shape=(b,3*np - 2)
-                s: squared COM energy with shape=(b,)
+                e_cm: COM energy with shape=(b,)
                 m_out: (virtual) masses of outgoing particles
                     with shape=(b,np)
 
@@ -54,8 +54,7 @@ class tChiliBlock(PhaseSpaceMapping):
             det (Tensor): log det of mapping with shape=(b,)
         """
         del condition
-        r, s, m_out = inputs[0], inputs[1], inputs[2]
-        rts = sqrt(s)
+        r, e_cm, m_out = inputs[0], inputs[1], inputs[2]
         p_nm1 = torch.zeros(r.shape[0], self.nout - 1, 4, device=r.device)
         p_n = torch.zeros(r.shape[0], 1, 4, device=r.device)
         p_in = torch.zeros(r.shape[0], 2, 4, device=r.device)
@@ -70,17 +69,17 @@ class tChiliBlock(PhaseSpaceMapping):
 
         # get the pts
         ptmin = self.ptmin
-        ptmax = sqrt(s) / 2  # generally too large, thats why we get x1x2 > 1 and NaNs
-        ptc = torch.where(m_out[..., :-1] > 0.0, m_out[..., :-1], ptmin)
-        delta_pt = ptmax - ptmin
+        ptmax = e_cm[:, None] / 2  # generally too large, thats why we get x1x2 > 1 and NaNs
+        ptc = torch.where(m_out[..., :-1] > 0.0, m_out[..., :-1], ptmin[:-1])
+        delta_pt = (ptmax - ptmin)[..., :-1]
         pt_denom = 2 * ptc + ptmax * (1 - r_pt)
-        pt = ptmin + (2 * ptc * delta_pt * r_pt) / pt_denom
+        pt = ptmin[:-1] + (2 * ptc * delta_pt * r_pt) / pt_denom
         det_pt = ((2 * ptc * delta_pt * (2 * ptc + ptmax)) / pt_denom**2).prod(dim=1)
 
         # get first n-1 rapidities and phi
         pt2 = pt**2
-        ymax = log(sqrt(s / 4 / pt2) + sqrt(s / 4 / pt2 - 1.0))
-        ymax = torch.minimum(ymax, self.ymax[:, :-1])
+        ymax = log(sqrt(e_cm[:, None]**2 / 4 / pt2) + sqrt(e_cm[:, None]**2 / 4 / pt2 - 1.0))
+        ymax = torch.minimum(ymax, self.ymax[:-1])
         y_nm1 = ymax * (2 * r_y[:, :-1] - 1.0)
         det_y = torch.prod(2 * ymax, dim=1)
         phi_nm1 = 2 * pi * r_phi
@@ -108,10 +107,10 @@ class tChiliBlock(PhaseSpaceMapping):
         m2 = m_out[:, -1] ** 2
         qt = sqrt(ptj2 + m2)
         mt = sqrt(ptj2 + mj2)
-        yminn = -log(rts / qt * (1.0 - mt / rts * exp(-yj)))
-        yminn = torch.maximum(yminn, -self.ymax[:, -1])  # apply potential cuts
-        ymaxn = log(rts / qt * (1.0 - mt / rts * exp(yj)))
-        ymax = torch.minimum(ymaxn, self.ymax[:, -1])  # apply potential cuts
+        yminn = -log(e_cm / qt * (1.0 - mt / e_cm * exp(-yj)))
+        yminn = torch.maximum(yminn, -self.ymax[-1])  # apply potential cuts
+        ymaxn = log(e_cm / qt * (1.0 - mt / e_cm * exp(yj)))
+        ymax = torch.minimum(ymaxn, self.ymax[-1])  # apply potential cuts
         dely = ymaxn - yminn
         yn = yminn + r_y[:, 1] * dely
         det_yn = dely
@@ -134,11 +133,11 @@ class tChiliBlock(PhaseSpaceMapping):
         p_in[:, 1, 3] = -pm / 2
 
         # Get the bjorken variables
-        x1 = pp / rts
-        x2 = pm / rts
+        x1 = pp / e_cm
+        x2 = pm / e_cm
 
         # Get all momenta
-        p_ext = torch.cat([p_in, p_out], dim=1)
+        #p_ext = torch.cat([p_in, p_out], dim=1)
         x1x2 = torch.stack([x1, x2], dim=1)
         det = det_pt * det_y * det_phi * det_yn
 
@@ -146,7 +145,7 @@ class tChiliBlock(PhaseSpaceMapping):
         mask_x1x2 = x1x2.prod(dim=1) < 1.0  # covers both this and NaNs!
         det[~mask_x1x2] = 0.0
 
-        return (p_ext, x1x2), det
+        return (p_in, p_out), det
 
     def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
@@ -158,7 +157,7 @@ class tChiliBlock(PhaseSpaceMapping):
 
         Returns:
             r (Tensor): random numbers with shape=(b,2)
-            s (Tensor): squared COM energy with shape=(b,)
+            e_cm (Tensor): squared COM energy with shape=(b,)
             m_out (Tensor): (virtual) masses of outgoing particles with shape=(b,np)
             det (Tensor): log det of mapping with shape=(b,)
         """
@@ -176,7 +175,7 @@ class tChiliBlock(PhaseSpaceMapping):
         p_in = p_ext[:, :2]
         p_out = p_ext[:, 2:]
         s = lsquare(p_in.sum(dim=1))
-        rts = sqrt(s)
+        e_cm = sqrt(s)
         m_out = sqrt(lsquare(p_out))
 
         # Get relevant psum and energies etc
@@ -191,9 +190,9 @@ class tChiliBlock(PhaseSpaceMapping):
         ptj2 = pT2(psum_nm1)
         qt = sqrt(ptj2 + m2n)
         mt = sqrt(ptj2 + mj2)
-        yminn = -log(rts / qt * (1.0 - mt / rts * exp(-yj)))
+        yminn = -log(e_cm / qt * (1.0 - mt / e_cm * exp(-yj)))
         yminn = torch.maximum(yminn, -ymax_masked[:, -1])  # apply potential cuts
-        ymaxn = log(rts / qt * (1.0 - mt / rts * exp(yj)))
+        ymaxn = log(e_cm / qt * (1.0 - mt / e_cm * exp(yj)))
         ymaxn = torch.minimum(ymaxn, ymax_masked[:, -1])  # apply potential cuts
         dely = ymaxn - yminn
 
@@ -223,7 +222,7 @@ class tChiliBlock(PhaseSpaceMapping):
 
         # get random numbers for pt
         ptmin = ptmin_masked
-        ptmax = sqrt(s) / 2
+        ptmax = e_cm / 2
         delta_pt = ptmax - ptmin
         ptc = torch.where(m_out[..., :-1] > 0.0, m_out[..., :-1], ptmin)
         pt_nm1 = sqrt(pt2_nm1)
@@ -236,7 +235,7 @@ class tChiliBlock(PhaseSpaceMapping):
         r = torch.stack([r_pt, r_y, r_yn[..., None], r_phi])
         det = det_pt * det_y * det_phi * det_yn
 
-        return (r, s, m_out), det
+        return (r, e_cm, m_out), det
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         del condition
