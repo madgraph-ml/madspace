@@ -159,20 +159,6 @@ def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     return torch.stack((q0, q1, q2, q3), dim=-1)
 
 
-def lsquare(a: Tensor) -> Tensor:
-    """Gives the lorentz invariant a^2 using
-    the Mikowski metric (1.0, -1.0, -1.0, -1.0)
-
-    Args:
-        a (Tensor): 4-vector with shape shape=(b,...,4)
-
-    Returns:
-        Tensor: Lorentzscalar with shape=(b,...)
-    """
-    s = a[..., 0] ** 2 - a[..., 1] ** 2 - a[..., 2] ** 2 - a[..., 3] ** 2
-    return torch.clamp_min_(s, EPS)
-
-
 def rapidity(p: Tensor) -> Tensor:
     """Gives the rapidity of a particle
 
@@ -330,6 +316,20 @@ def mass(a: Tensor) -> Tensor:
         Tensor: mass with shape=(b,...)
     """
     return sqrt(lsquare(a))
+
+
+def lsquare(a: Tensor) -> Tensor:
+    """Gives the lorentz invariant a^2 using
+    the Mikowski metric (1.0, -1.0, -1.0, -1.0)
+
+    Args:
+        a (Tensor): 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: Lorentzscalar with shape=(b,...)
+    """
+    s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    return torch.clamp_min_(s, EPS)
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
