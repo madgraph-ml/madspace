@@ -6,6 +6,8 @@ from math import pi
 
 
 MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
+DTYE = torch.get_default_dtype()
+EPS = 1e-12 if DTYE == torch.float64 else 1e-6
 
 
 def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
@@ -54,20 +56,20 @@ def tinv_two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
     return g
 
 
-def kaellen(a: Tensor, b: Tensor, c: Tensor) -> Tensor:
+def kaellen(x: Tensor, y: Tensor, z: Tensor) -> Tensor:
     """Definition of the standard kaellen function [1]
 
     [1] https://en.wikipedia.org/wiki/Källén_function
 
     Args:
-        a (Tensor): input 1
-        b (Tensor): input 2
-        c (Tensor): input 3
+        x (Tensor): input 1
+        y (Tensor): input 2
+        z (Tensor): input 3
 
     Returns:
         Tensor: Kaellen function
     """
-    return a**2 + b**2 + c**2 - 2 * a * b - 2 * b * c - 2 * c * a
+    return (x - y - z) ** 2 - 4 * y * z
 
 
 def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
@@ -167,7 +169,8 @@ def lsquare(a: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    s = a[..., 0] ** 2 - a[..., 1] ** 2 - a[..., 2] ** 2 - a[..., 3] ** 2
+    return torch.clamp_min_(s, EPS)
 
 
 def rapidity(p: Tensor) -> Tensor:
@@ -183,7 +186,7 @@ def rapidity(p: Tensor) -> Tensor:
     Pz = p[..., 3]
 
     y = 0.5 * log((Es + Pz) / (Es - Pz))
-    return torch.where(Es == 0, 99.0, y)
+    return torch.where(Es < EPS, 99.0, y)
 
 
 def phi(p: Tensor) -> Tensor:
@@ -302,7 +305,7 @@ def pmag(p: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(pmag2(p))
+    return sqrt(torch.clamp_min_(pmag2(p), EPS))
 
 
 def costheta(p: Tensor) -> Tensor:
@@ -326,7 +329,7 @@ def mass(a: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(abs(lsquare(a)))
+    return sqrt(lsquare(a))
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
@@ -392,7 +395,7 @@ def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
 
     # Perform the boost
     # This is in fact a numerical more stable implementation then often used
-    rsq = sqrt(lsquare(p_boost))
+    rsq = mass(p_boost)
     k0 = (k[..., 0] * p_boost[..., 0] + sign * edot(k[..., 1:], p_boost[..., 1:])) / rsq
     c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
     k1 = k[..., 1] + sign * c1 * p_boost[..., 1]
