@@ -395,9 +395,10 @@ class DiagramMapping(PhaseSpaceMapping):
             sqrt_s_index = 0
             layer_masses = []
             for decay_count in layer_counts:
+                sqs_clip = self.sqrt_s_epsilon if decay_count > 1 else 0.
                 sqrt_s_min.append(torch.clip(sum(
                     sqrt_s[sqrt_s_index + i] for i in range(decay_count)
-                ), min=self.sqrt_s_epsilon))
+                ), min=sqs_clip))
                 layer_masses.append(sqrt_s[sqrt_s_index : sqrt_s_index + decay_count])
                 sqrt_s_index += decay_count
             decay_masses.append(layer_masses)
