@@ -9,7 +9,7 @@ WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
-nsamples = 3
+nsamples = 3000
 
 
 def print_info(diagram):
@@ -191,7 +191,9 @@ for leptonic in [False, True]:
         outgoing=[out1, out2, out3, out4],
         vertices=[v1, v2, v3, v4]
     )
-    dmap = DiagramMapping(ww_llvv, torch.tensor(13000.**2), 1.**2, leptonic=leptonic)
+    dmap = DiagramMapping(
+        ww_llvv, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, s_min_epsilon=0.
+    )
     (p_auto, x_auto), jac_auto = dmap.map([r])
 
     print_info(ww_llvv)

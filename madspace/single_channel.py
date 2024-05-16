@@ -23,6 +23,7 @@ from .invariants import (
     UniformInvariantBlock,
     MasslessInvariantBlock,
 )
+from icecream import ic
 
 
 class SingleChannelWWW(PhaseSpaceMapping):
@@ -706,7 +707,7 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         if not leptonic:
             self.luminosity = Luminosity(s_lab, s_hat_min)  # 2dof
 
-        self.s23 = MasslessInvariantBlock(nu=2.0)  # 1 dof
+        self.s23 = MasslessInvariantBlock()  # 1 dof
         if mV is not None:
             self.s234 = BreitWignerInvariantBlock(mV, wV)  # 1 dof
         else:

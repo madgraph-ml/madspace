@@ -293,6 +293,7 @@ class DiagramMapping(PhaseSpaceMapping):
         s_hat_min: float = 0.,
         leptonic: bool = False,
         t_mapping: str = "diagram",
+        s_min_epsilon: float = 1e-2,
     ):
         n_out = len(diagram.outgoing)
         dims_in = [(3 * n_out - 2 - (0 if leptonic else 2), )]
@@ -301,8 +302,20 @@ class DiagramMapping(PhaseSpaceMapping):
 
         self.diagram = diagram
         self.s_lab = s_lab
+        self.sqrt_s_epsilon = s_min_epsilon ** 0.5
+
+        epsilons = [0.] * len(diagram.outgoing)
+        for layer in reversed(diagram.s_decay_layers):
+            eps_iter = iter(epsilons)
+            epsilons = []
+            for count in layer:
+                epsilons.append(
+                    max(self.sqrt_s_epsilon, sum(next(eps_iter) for i in range(count)))
+                )
+        s_min_decay = sum(epsilons) ** 2
+
         s_hat_min = torch.tensor(max(
-            sum(line.mass for line in diagram.outgoing) ** 2, s_hat_min
+            sum(line.mass for line in diagram.outgoing) ** 2, s_min_decay, s_hat_min
         ))
 
         # Initialize luminosity and t-channel mapping
@@ -382,9 +395,9 @@ class DiagramMapping(PhaseSpaceMapping):
             sqrt_s_index = 0
             layer_masses = []
             for decay_count in layer_counts:
-                sqrt_s_min.append(sum(
+                sqrt_s_min.append(torch.clip(sum(
                     sqrt_s[sqrt_s_index + i] for i in range(decay_count)
-                ))
+                ), min=self.sqrt_s_epsilon))
                 layer_masses.append(sqrt_s[sqrt_s_index : sqrt_s_index + decay_count])
                 sqrt_s_index += decay_count
             decay_masses.append(layer_masses)
@@ -428,6 +441,8 @@ class DiagramMapping(PhaseSpaceMapping):
                     continue
                 m_out = torch.cat(masses, dim=1)
                 (k_out, ), jac = next(decay_iter).map([rand(2), k_in, m_out])
+                if len(k_in.shape) == 1:
+                    mask = k_out.isnan().any(dim=1).any(dim=1)
                 p_out.extend(k_out.unbind(dim=1))
                 ps_weight *= jac
         p_out = torch.stack(p_out, dim=1)
