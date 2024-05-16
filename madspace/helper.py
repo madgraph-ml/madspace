@@ -481,3 +481,20 @@ def two_body_decay_factor(
             * (M_i_minus_1**2 - (M_i - m_i_minus_1) ** 2)
         )
     )
+
+
+def build_p_in(e_cm: Tensor) -> Tensor:
+    """Build symmetric incoming momenta given the center of mass energy
+
+    Args:
+        e_cm: Center of mass energy, shape=(b,)
+
+    Returns:
+        p_in: Incoming momenta, shape=(b,2,4)
+    """
+    zeros = torch.zeros_like(e_cm)
+    p_cms = e_cm / 2
+    p1 = torch.stack([p_cms, zeros, zeros, p_cms], dim=1)
+    p2 = torch.stack([p_cms, zeros, zeros, -p_cms], dim=1)
+    p_in = torch.stack([p1, p2], dim=1)
+    return p_in

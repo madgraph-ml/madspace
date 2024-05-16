@@ -5,7 +5,7 @@ from math import pi
 import torch
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import boost_beam, lsquare
+from .helper import boost_beam, lsquare, build_p_in
 from .twoparticle import (
     tInvariantTwoParticleCOM,
     tInvariantTwoParticleLAB,
@@ -172,17 +172,127 @@ class Diagram:
         self.inverse_permutation = [self.outgoing.index(line) for line in lines]
 
 
+class RandomNumbers:
+    def __init__(self, random: Tensor):
+        self.random = random
+        self.index = 0
+
+    def __call__(self, count: int = 1) -> Tensor:
+        r = self.random[:, self.index : self.index + count]
+        self.index += count
+        return r
+
+    def empty(self) -> bool:
+        return self.index == self.random.shape[1]
+
+
+class tDiagramMapping(PhaseSpaceMapping):
+    """Implements a mapping for the t-channel part of a Feynman diagram using the algorithm
+    described in section 3.2 of
+        [1] https://arxiv.org/pdf/2102.00773
+    """
+    def __init__(self, diagram: Diagram):
+        n_particles = len(diagram.lines_after_t)
+        if n_particles != len(diagram.t_channel_vertices):
+            raise ValueError(
+                "Only vertices with 3 lines are supported in the t-channel part of the diagram"
+            )
+        self.n_random = 3 * n_particles - 4
+        dims_in = [(self.n_random,), (), (n_particles,)]
+        dims_out = [(n_particles, 4)]
+        super().__init__(dims_in, dims_out)
+
+        none_if_zero = lambda x: None if x == 0 else x
+
+        last_t_line = diagram.t_channel_lines[-1]
+        self.t_invariants = [
+            tInvariantTwoParticleCOM(nu=1.4)
+            if last_t_line.mass == 0. else
+            tInvariantTwoParticleCOM(
+                mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
+            )
+        ]
+        self.s_uniform_invariants = []
+        for line in reversed(diagram.t_channel_lines[:-1]):
+            self.t_invariants.append(
+                tInvariantTwoParticleLAB(nu=1.4)
+                if line.mass == 0. else
+                tInvariantTwoParticleLAB(
+                    mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
+                )
+            )
+            self.s_uniform_invariants.append(UniformInvariantBlock())
+
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, e_cm, m_out]
+                r: random numbers with shape=(b,3*n-4)
+                e_cm: COM energy with shape=(b,)
+                m_out: (virtual) masses of outgoing particles with shape=(b,n)
+
+        Returns:
+            p_in (Tensor): incoming momenta with shape=(b,2,4)
+            p_out (Tensor): output momenta with shape=(b,n,4)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+
+        rand = RandomNumbers(inputs[0])  # has dims (b,3*n-4)
+        e_cm = inputs[1]  # has dims (b,) or ()
+        m_out = inputs[2]  # has dims (b,n)
+        det = 1.
+
+        # construct initial state momenta
+        p_in = build_p_in(e_cm)
+        p1, p2 = p_in[:,0], p_in[:,1]
+
+        # sample s-invariants from the t-channel part of the diagram
+        sqrt_s_max = e_cm[:,None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
+        cumulated_m_out = [m_out[:,:1]]
+        for invariant, sqs, sqs_max in zip(
+            self.s_uniform_invariants, m_out[:, 1:-1].unbind(dim=1), sqrt_s_max.unbind(dim=1)
+        ):
+            s_min = (cumulated_m_out[-1] + sqs[:,None]) ** 2
+            s_max = sqs_max[:,None] ** 2
+            (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
+            cumulated_m_out.append(s.sqrt())
+            det *= jac
+
+        # sample t-invariants and build momenta of t-channel part of the diagram
+        p_out = []
+        p_t_in = p_in
+        p2_rest = p2
+        for invariant, cum_m_out, mass in zip(
+            self.t_invariants, reversed(cumulated_m_out), reversed(m_out[:, 1:].unbind(dim=1))
+        ):
+            m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
+            (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
+            k_rest, k = ks[:, 0], ks[:, 1]
+            p_out.append(k)
+            p2_rest = p2_rest - k
+            p_t_in = torch.stack([p1, p2_rest], dim=1)
+            det *= jac
+        p_out.append(k_rest)
+        p_out = torch.stack(p_out, dim=1).flip([1])
+        return (p_in, p_out,), det
+
+
 class DiagramMapping(PhaseSpaceMapping):
     """
     TODO:
-        - leptonic initial state
-        - pure s-channel diagrams
         - support quartic vertices
         - alternative strategy: chili + s-channel
         - alternative strategy: rambo + s-channel
     """
     def __init__(
-        self, diagram: Diagram, s_lab: Tensor, s_hat_min: float = 0., leptonic: bool = False
+        self,
+        diagram: Diagram,
+        s_lab: Tensor,
+        s_hat_min: float = 0.,
+        leptonic: bool = False,
+        t_mapping: str = "diagram",
     ):
         n_out = len(diagram.outgoing)
         dims_in = [(3 * n_out - 2 - (0 if leptonic else 2), )]
@@ -190,37 +300,21 @@ class DiagramMapping(PhaseSpaceMapping):
         super().__init__(dims_in, dims_out)
 
         self.diagram = diagram
-        self.leptonic = leptonic
-
         self.s_lab = s_lab
         s_hat_min = torch.tensor(max(
             sum(line.mass for line in diagram.outgoing) ** 2, s_hat_min
         ))
 
+        # Initialize luminosity and t-channel mapping
         self.has_t_channel = len(diagram.t_channel_lines) != 0
+        self.luminosity = None
         if self.has_t_channel:
-            if not leptonic:
+            if not (leptonic or t_mapping == "chili"):
                 self.luminosity = Luminosity(s_lab, s_hat_min)
-            none_if_zero = lambda x: None if x == 0 else x
-
-            last_t_line = diagram.t_channel_lines[-1]
-            self.t_invariants = [
-                tInvariantTwoParticleCOM(nu=1.4)
-                if last_t_line.mass == 0. else
-                tInvariantTwoParticleCOM(
-                    mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
-                )
-            ]
-            self.s_uniform_invariants = []
-            for line in reversed(diagram.t_channel_lines[:-1]):
-                self.t_invariants.append(
-                    tInvariantTwoParticleLAB(nu=1.4)
-                    if line.mass == 0. else
-                    tInvariantTwoParticleLAB(
-                        mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
-                    )
-                )
-                self.s_uniform_invariants.append(UniformInvariantBlock())
+            if t_mapping == "diagram":
+                self.t_mapping = tDiagramMapping(diagram)
+            else:
+                raise ValueError(f"Unknown t-channel mapping {t_mapping}")
         elif not leptonic:
             s_line = diagram.s_channel_lines[0]
             if self.diagram.s_channel_lines[0] is not None:
@@ -230,6 +324,7 @@ class DiagramMapping(PhaseSpaceMapping):
             else:
                 self.luminosity = Luminosity(s_lab, s_hat_min)
 
+        # Initialize s invariants and decay mappings
         self.s_decay_invariants = []
         self.s_decays = []
         line_iter = iter(diagram.s_channel_lines)
@@ -262,16 +357,11 @@ class DiagramMapping(PhaseSpaceMapping):
 
     def map(self, inputs: TensorList, condition=None):
         random = inputs[0]
-        random_index = 0
-        def rand(count=1):
-            nonlocal random_index
-            r = random[:, random_index : random_index + count]
-            random_index += count
-            return r
+        rand = RandomNumbers(random)
         ps_weight = 1.
 
         # Do luminosity and get s_hat and rapidity
-        if self.leptonic:
+        if self.luminosity is None:
             s_hat = torch.full((random.shape[0],), self.s_lab, device=random.device)
             det_lumi = 1.0
             x1x2 = torch.ones((random.shape[0], 2), device=random.device)
@@ -281,13 +371,6 @@ class DiagramMapping(PhaseSpaceMapping):
             s_hat = self.s_lab * x1x2.prod(dim=1)
             rap = 0.5 * torch.log(x1x2[:, 0] / x1x2[:, 1])[:, None]
         sqrt_s_hat = s_hat.sqrt()
-
-        # construct initial state momenta
-        zeros = torch.zeros_like(sqrt_s_hat)
-        p_cms = sqrt_s_hat / 2
-        p1 = torch.stack([p_cms, zeros, zeros, p_cms], dim=1)
-        p2 = torch.stack([p_cms, zeros, zeros, -p_cms], dim=1)
-        p_in = torch.stack([p1, p2], dim=1)
 
         # sample s-invariants from decays, starting from the final state particles
         sqrt_s = [torch.full_like(sqrt_s_hat, line.mass)[:, None] for line in self.diagram.outgoing]
@@ -323,33 +406,13 @@ class DiagramMapping(PhaseSpaceMapping):
                 ps_weight *= jac
 
         if self.has_t_channel:
-            # sample s-invariants from the t-channel part of the diagram
-            sqrt_s_max = sqrt_s_hat[:,None] - torch.stack(list(reversed(sqrt_s)), dim=0)[:-2].cumsum(dim=0)
-            cumulated_sqrt_s = [sqrt_s[0]]
-            for invariant, sqs, sqs_max in zip(self.s_uniform_invariants, sqrt_s[1:-1], sqrt_s_max):
-                s_min = (cumulated_sqrt_s[-1] + sqs) ** 2
-                s_max = sqs_max ** 2
-                (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
-                cumulated_sqrt_s.append(s.sqrt())
-                ps_weight *= jac
-
-            # sample t-invariants and build momenta of t-channel part of the diagram
-            k_t = []
-            p_t_in = p_in
-            p2_rest = p2
-            for invariant, cum_sqrt_s, out_sqrt_s in zip(
-                self.t_invariants, reversed(cumulated_sqrt_s), reversed(sqrt_s[1:])
-            ):
-                m_t = torch.cat([cum_sqrt_s, out_sqrt_s], dim=1)
-                (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
-                k_rest, k = ks[:, 0], ks[:, 1]
-                k_t.append(k)
-                p2_rest = p2_rest - k
-                p_t_in = torch.stack([p1, p2_rest], dim=1)
-                ps_weight *= jac
-            k_t.append(k_rest)
-            p_out = list(reversed(k_t))
+            (p_in, p_out,), jac = self.t_mapping.map([
+                rand(self.t_mapping.n_random), sqrt_s_hat, torch.cat(sqrt_s, dim=1)
+            ])
+            ps_weight *= jac
+            p_out = p_out.unbind(dim=1)
         else:
+            p_in = build_p_in(sqrt_s_hat)
             p_out = [s_hat]
 
         # build the momenta of the decays
@@ -370,11 +433,11 @@ class DiagramMapping(PhaseSpaceMapping):
         p_out = torch.stack(p_out, dim=1)
 
         # we should have consumed all the random numbers
-        assert random_index == random.shape[1]
+        assert rand.empty()
 
         # permute and return momenta
         p_ext = torch.cat([p_in, p_out[:, self.diagram.permutation]], dim=1)
-        p_ext_lab = p_ext if self.leptonic else boost_beam(p_ext, rap)
+        p_ext_lab = p_ext if self.luminosity is None else boost_beam(p_ext, rap)
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
     def map_inverse(self, inputs: TensorList, condition=None):

@@ -18,6 +18,7 @@ from .helper import (
     mass,
     esquare,
     lsquare,
+    build_p_in,
 )
 
 
@@ -280,13 +281,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         w0 = torch_ones * self._massles_weight(e_cm)
 
         # construct initial state momenta
-        p1 = torch.zeros((r.shape[0], 4), device=r.device)
-        p2 = torch.zeros((r.shape[0], 4), device=r.device)
-        p1[:, 0] = e_cm / 2
-        p1[:, 3] = e_cm / 2
-        p2[:, 0] = e_cm / 2
-        p2[:, 3] = -e_cm / 2
-        p_in = torch.stack([p1, p2], dim=1)
+        p_in = build_p_in(e_cm)
 
         if self.masses is not None:
             # match dimensions of masses
@@ -453,7 +448,8 @@ class tRamboBlock(PhaseSpaceMapping):
                 m_out: (virtual) masses of outgoing particles with shape=(b,n)
 
         Returns:
-            p_ext (Tensor): external momenta with shape=(b,n+2,4)
+            p_in (Tensor): incoming momenta with shape=(b,2,4)
+            p_ext (Tensor): external momenta with shape=(b,n,4)
             det (Tensor): det of mapping with shape=(b,)
         """
         del condition
@@ -543,8 +539,8 @@ class tRamboBlock(PhaseSpaceMapping):
         # Get massive density corr. factor
         w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
 
-        p_ext = torch.cat([p_in, k_out], dim=1)
-        return (p_ext,), w_m * w0
+        #p_ext = torch.cat([p_in, k_out], dim=1)
+        return (p_in, k_out,), w_m * w0
 
     def map_inverse(self, inputs: TensorList, condition=None):
         """Map from momenta to random numbers
