@@ -10,7 +10,7 @@ from torch import Tensor, sqrt, log
 from math import pi
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import boost_beam, lsquare
+from .helper import boost_beam, lsquare, EPS
 from .twoparticle import (
     tInvariantTwoParticleCOM,
     tInvariantTwoParticleLAB,
@@ -23,8 +23,6 @@ from .invariants import (
     UniformInvariantBlock,
     MasslessInvariantBlock,
 )
-
-from icecream import ic
 
 
 class SingleChannelWWW(PhaseSpaceMapping):
@@ -512,7 +510,7 @@ class Diagramm_ww_llvv(PhaseSpaceMapping):
 
         # get minimum cuts
         self.s_lab = s_lab
-        s_hat_min = (torch.tensor(1.0)) ** 2
+        s_hat_min = (torch.tensor(20.0)) ** 2
 
         # Define mappings
         if not leptonic:
@@ -702,12 +700,13 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         # get minimum cuts
         self.s_lab = s_lab
         s_hat_min = torch.tensor(20.0**2)
+        self.s23_min = torch.tensor(1e-2)
 
         # Define mappings
         if not leptonic:
             self.luminosity = Luminosity(s_lab, s_hat_min)  # 2dof
 
-        self.s23 = MasslessInvariantBlock()  # 1 dof
+        self.s23 = MasslessInvariantBlock(nu=2.0)  # 1 dof
         if mV is not None:
             self.s234 = BreitWignerInvariantBlock(mV, wV)  # 1 dof
         else:
@@ -772,10 +771,10 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         # ----------------------------
         # Sample s-invariants
 
-        s23_min = torch.zeros_like(s_hat[:, None])
+        s23_min = torch.ones_like(s_hat[:, None]) * self.s23_min
         s23_max = s_hat[:, None]
         (s23,), det_s23 = self.s23.map([r_s23], condition=[s23_min, s23_max])
-
+        
         s234_min = s23
         s234_max = s_hat[:, None]
         (s234,), det_s234 = self.s234.map([r_s234], condition=[s234_min, s234_max])

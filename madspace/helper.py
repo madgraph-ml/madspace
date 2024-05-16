@@ -6,6 +6,8 @@ from math import pi
 
 
 MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
+DTYE = torch.get_default_dtype()
+EPS = 1e-12 if DTYE == torch.float64 else 1e-6
 
 
 def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
@@ -54,20 +56,20 @@ def tinv_two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
     return g
 
 
-def kaellen(a: Tensor, b: Tensor, c: Tensor) -> Tensor:
+def kaellen(x: Tensor, y: Tensor, z: Tensor) -> Tensor:
     """Definition of the standard kaellen function [1]
 
     [1] https://en.wikipedia.org/wiki/Källén_function
 
     Args:
-        a (Tensor): input 1
-        b (Tensor): input 2
-        c (Tensor): input 3
+        x (Tensor): input 1
+        y (Tensor): input 2
+        z (Tensor): input 3
 
     Returns:
         Tensor: Kaellen function
     """
-    return a**2 + b**2 + c**2 - 2 * a * b - 2 * b * c - 2 * c * a
+    return (x - y - z) ** 2 - 4 * y * z
 
 
 def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
@@ -157,19 +159,6 @@ def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
     return torch.stack((q0, q1, q2, q3), dim=-1)
 
 
-def lsquare(a: Tensor) -> Tensor:
-    """Gives the lorentz invariant a^2 using
-    the Mikowski metric (1.0, -1.0, -1.0, -1.0)
-
-    Args:
-        a (Tensor): 4-vector with shape shape=(b,...,4)
-
-    Returns:
-        Tensor: Lorentzscalar with shape=(b,...)
-    """
-    return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
-
-
 def rapidity(p: Tensor) -> Tensor:
     """Gives the rapidity of a particle
 
@@ -183,7 +172,7 @@ def rapidity(p: Tensor) -> Tensor:
     Pz = p[..., 3]
 
     y = 0.5 * log((Es + Pz) / (Es - Pz))
-    return torch.where(Es == 0, 99.0, y)
+    return torch.where(Es < EPS, 99.0, y)
 
 
 def phi(p: Tensor) -> Tensor:
@@ -326,8 +315,21 @@ def mass(a: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    #return sqrt(abs(lsquare(a)))
-    return sqrt(clip(lsquare(a), min=0))
+    return sqrt(lsquare(a))
+
+
+def lsquare(a: Tensor) -> Tensor:
+    """Gives the lorentz invariant a^2 using
+    the Mikowski metric (1.0, -1.0, -1.0, -1.0)
+
+    Args:
+        a (Tensor): 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: Lorentzscalar with shape=(b,...)
+    """
+    s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    return torch.clamp_min_(s, EPS)
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
@@ -393,7 +395,7 @@ def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
 
     # Perform the boost
     # This is in fact a numerical more stable implementation then often used
-    rsq = sqrt(lsquare(p_boost))
+    rsq = mass(p_boost)
     k0 = (k[..., 0] * p_boost[..., 0] + sign * edot(k[..., 1:], p_boost[..., 1:])) / rsq
     c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
     k1 = k[..., 1] + sign * c1 * p_boost[..., 1]

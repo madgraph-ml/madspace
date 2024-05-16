@@ -2,7 +2,6 @@ import torch
 
 torch.set_default_dtype(torch.float64)
 from madspace.single_channel import Diagramm_ww_llvv, Diagramm_llvvA
-from madspace.helper import mass
 from icecream import ic
 
 MW = torch.tensor(80.377)
@@ -25,20 +24,19 @@ for leptonic in [False, True]:
             print("~~~~~ Photon Channel ~~~~~\n")
         s = torch.tensor(500.0**2) if leptonic else torch.tensor(13000.0**2)
         k = 0 if leptonic else 2
-        n = int(3)
+        n = int(1000000)
         shape = (n, 8 + k)
         llmap = Diagramm_ww_llvv(s, MW, WW, mV=mV, wV=wV, leptonic=leptonic)
         r = torch.rand(shape)
         (p_ext, x1x2), det = llmap.map([r])
-        ic(p_ext)
-        ic(x1x2)
-        ic(det)
+        ic(p_ext[...,0].abs().max())
+        ic(p_ext[...,0].min())
         print("\n")
 
 
 print("====== Multi-structured ======\n")
 
-for leptonic in [False, True]:
+for leptonic in [True, False]:
     if leptonic:
         print("------- leptonic ----------\n")
     else:
@@ -50,10 +48,11 @@ for leptonic in [False, True]:
             print("~~~~~ Photon Channel ~~~~~\n")
         s = torch.tensor(500.0**2) if leptonic else torch.tensor(13000.0**2)
         k = 0 if leptonic else 2
-        n = int(3)
+        n = int(1000000)
         shape = (n, 11 + k)
         llmap = Diagramm_llvvA(s, MW, WW, mV=mV, wV=wV, leptonic=leptonic)
         r = torch.rand(shape)
         (p_ext, x1x2), det = llmap.map([r])
-        ic(p_ext)
+        ic(p_ext[...,0].abs().max())
+        ic(p_ext[...,0].min())
         print("\n")

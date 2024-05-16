@@ -9,9 +9,9 @@
 """
 
 
-from typing import Tuple
-from torch import Tensor, log, atan, tan, sqrt
-from ..helper import kaellen, lsquare
+from torch import Tensor, sqrt
+import torch
+from ..helper import kaellen, EPS
 
 
 def costheta_to_invt(
@@ -32,7 +32,7 @@ def costheta_to_invt(
     num2 = sqrt(kaellen(s, m1**2, m2**2)) * sqrt(kaellen(s, p1_2, p2_2)) * costheta
     num = num1 - num2
     t = m1**2 + p1_2 - num / (2 * s)
-    return t
+    return torch.clamp_max_(t, -EPS)
 
 
 def invt_to_costheta(
@@ -52,4 +52,4 @@ def invt_to_costheta(
     num = num1 + num2
     denom = sqrt(kaellen(s, m1**2, m2**2)) * sqrt(kaellen(s, p1_2, p2_2))
     costheta = num / denom
-    return costheta
+    return torch.clamp_(costheta, -1.0, 1.0)
