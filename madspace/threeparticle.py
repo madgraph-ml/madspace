@@ -7,7 +7,7 @@ import torch
 from torch import sqrt, atan2
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import (
+from .functional.kinematics import (
     inv_rotate_zy,
     rotate_zy,
     boost,
@@ -15,8 +15,8 @@ from .helper import (
     lsquare,
     edot,
     pi,
-    three_particle_density,
 )
+from .functional.ps_utils import three_particle_density
 from .invariants import UniformInvariantBlock
 
 

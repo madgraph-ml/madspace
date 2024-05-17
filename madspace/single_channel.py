@@ -10,7 +10,7 @@ from torch import Tensor, sqrt, log
 from math import pi
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import boost_beam, lsquare, EPS
+from .functional.kinematics import boost_beam, lsquare
 from .twoparticle import (
     tInvariantTwoParticleCOM,
     tInvariantTwoParticleLAB,
@@ -775,7 +775,7 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         s23_min = torch.ones_like(s_hat[:, None]) * self.s23_min
         s23_max = s_hat[:, None]
         (s23,), det_s23 = self.s23.map([r_s23], condition=[s23_min, s23_max])
-        
+
         s234_min = s23
         s234_max = s_hat[:, None]
         (s234,), det_s234 = self.s234.map([r_s234], condition=[s234_min, s234_max])

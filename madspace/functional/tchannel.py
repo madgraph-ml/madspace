@@ -11,7 +11,7 @@
 
 from torch import Tensor, sqrt
 import torch
-from ..helper import kaellen, EPS
+from .kinematics import kaellen, EPS
 
 
 def costheta_to_invt(

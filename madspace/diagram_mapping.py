@@ -3,9 +3,11 @@ from dataclasses import dataclass, field
 from math import pi
 
 import torch
+from torch import Tensor
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import boost_beam, lsquare, build_p_in
+from .functional.kinematics import boost_beam, lsquare
+from .functional.ps_utils import build_p_in
 from .twoparticle import (
     tInvariantTwoParticleCOM,
     tInvariantTwoParticleLAB,
@@ -14,12 +16,16 @@ from .twoparticle import (
 )
 from .luminosity import Luminosity, ResonantLuminosity
 from .invariants import (
-    BreitWignerInvariantBlock, UniformInvariantBlock, MasslessInvariantBlock, StableInvariantBlock
+    BreitWignerInvariantBlock,
+    UniformInvariantBlock,
+    MasslessInvariantBlock,
+    StableInvariantBlock,
 )
 from .rambo import tRamboBlock
 from .chili import tChiliBlock
 
 from icecream import ic
+
 
 @dataclass(eq=False)
 class Line:
@@ -31,8 +37,9 @@ class Line:
         width: decay width of the particle, optional, default 0.
         name: name for the line, optional
     """
-    mass: float = 0.
-    width: float = 0.
+
+    mass: float = 0.0
+    width: float = 0.0
     name: str | None = None
     vertices: list[Vertex] = field(init=False, default_factory=list)
     sqrt_s_min: float | None = field(init=False, default=None)
@@ -47,6 +54,7 @@ class Line:
             return f"{self.vertices[0]} -- {self.vertices[1]}"
         else:
             return "?"
+
 
 @dataclass(eq=False)
 class Vertex:
@@ -85,9 +93,9 @@ class Diagram:
         self._fill_names(self.incoming, "in")
         self._fill_names(self.outgoing, "out")
 
-        (
-            t_channel_lines, self.t_channel_vertices
-        ) = self._t_channel_recursive(self.incoming[0], None)
+        (t_channel_lines, self.t_channel_vertices) = self._t_channel_recursive(
+            self.incoming[0], None
+        )
         self.t_channel_lines = t_channel_lines[1:]
         self._fill_names(self.t_channel_lines, "t")
         self._init_lines_after_t()
@@ -193,6 +201,7 @@ class tDiagramMapping(PhaseSpaceMapping):
     described in section 3.2 of
         [1] https://arxiv.org/pdf/2102.00773
     """
+
     def __init__(self, diagram: Diagram):
         n_particles = len(diagram.lines_after_t)
         if n_particles != len(diagram.t_channel_vertices):
@@ -208,8 +217,8 @@ class tDiagramMapping(PhaseSpaceMapping):
         last_t_line = diagram.t_channel_lines[-1]
         self.t_invariants = [
             tInvariantTwoParticleCOM(nu=1.4)
-            if last_t_line.mass == 0. else
-            tInvariantTwoParticleCOM(
+            if last_t_line.mass == 0.0
+            else tInvariantTwoParticleCOM(
                 mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
             )
         ]
@@ -217,8 +226,8 @@ class tDiagramMapping(PhaseSpaceMapping):
         for line in reversed(diagram.t_channel_lines[:-1]):
             self.t_invariants.append(
                 tInvariantTwoParticleLAB(nu=1.4)
-                if line.mass == 0. else
-                tInvariantTwoParticleLAB(
+                if line.mass == 0.0
+                else tInvariantTwoParticleLAB(
                     mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
                 )
             )
@@ -243,21 +252,23 @@ class tDiagramMapping(PhaseSpaceMapping):
         rand = RandomNumbers(inputs[0])  # has dims (b,3*n-4)
         e_cm = inputs[1]  # has dims (b,) or ()
         m_out = inputs[2]  # has dims (b,n)
-        det = 1.
+        det = 1.0
 
         # construct initial state momenta
         p_in = build_p_in(e_cm)
-        p1, p2 = p_in[:,0], p_in[:,1]
+        p1, p2 = p_in[:, 0], p_in[:, 1]
 
         # sample s-invariants from the t-channel part of the diagram
-        sqrt_s_max = e_cm[:,None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
-        cumulated_m_out = [m_out[:,:1]]
+        sqrt_s_max = e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
+        cumulated_m_out = [m_out[:, :1]]
         for invariant, sqs, sqs_max in zip(
-            self.s_uniform_invariants, m_out[:, 1:-1].unbind(dim=1), sqrt_s_max.unbind(dim=1)
+            self.s_uniform_invariants,
+            m_out[:, 1:-1].unbind(dim=1),
+            sqrt_s_max.unbind(dim=1),
         ):
-            s_min = (cumulated_m_out[-1] + sqs[:,None]) ** 2
-            s_max = sqs_max[:,None] ** 2
-            (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
+            s_min = (cumulated_m_out[-1] + sqs[:, None]) ** 2
+            s_max = sqs_max[:, None] ** 2
+            (s,), jac = invariant.map([rand()], condition=[s_min, s_max])
             cumulated_m_out.append(s.sqrt())
             det *= jac
 
@@ -266,10 +277,12 @@ class tDiagramMapping(PhaseSpaceMapping):
         p_t_in = p_in
         p2_rest = p2
         for invariant, cum_m_out, mass in zip(
-            self.t_invariants, reversed(cumulated_m_out), reversed(m_out[:, 1:].unbind(dim=1))
+            self.t_invariants,
+            reversed(cumulated_m_out),
+            reversed(m_out[:, 1:].unbind(dim=1)),
         ):
             m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
-            (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
+            (ks,), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
             k_rest, k = ks[:, 0], ks[:, 1]
             p_out.append(k)
             p2_rest = p2_rest - k
@@ -277,7 +290,10 @@ class tDiagramMapping(PhaseSpaceMapping):
             det *= jac
         p_out.append(k_rest)
         p_out = torch.stack(p_out, dim=1).flip([1])
-        return (p_in, p_out,), det
+        return (
+            p_in,
+            p_out,
+        ), det
 
 
 class DiagramMapping(PhaseSpaceMapping):
@@ -287,25 +303,26 @@ class DiagramMapping(PhaseSpaceMapping):
         - alternative strategy: chili + s-channel
         - alternative strategy: rambo + s-channel
     """
+
     def __init__(
         self,
         diagram: Diagram,
         s_lab: Tensor,
-        s_hat_min: float = 0.,
+        s_hat_min: float = 0.0,
         leptonic: bool = False,
         t_mapping: str = "diagram",
         s_min_epsilon: float = 1e-2,
     ):
         n_out = len(diagram.outgoing)
-        dims_in = [(3 * n_out - 2 - (0 if leptonic else 2), )]
-        dims_out = [(n_out, 4), (2, )]
+        dims_in = [(3 * n_out - 2 - (0 if leptonic else 2),)]
+        dims_out = [(n_out, 4), (2,)]
         super().__init__(dims_in, dims_out)
 
         self.diagram = diagram
         self.s_lab = s_lab
-        self.sqrt_s_epsilon = s_min_epsilon ** 0.5
+        self.sqrt_s_epsilon = s_min_epsilon**0.5
 
-        epsilons = [0.] * len(diagram.outgoing)
+        epsilons = [0.0] * len(diagram.outgoing)
         for layer in reversed(diagram.s_decay_layers):
             eps_iter = iter(epsilons)
             epsilons = []
@@ -315,9 +332,11 @@ class DiagramMapping(PhaseSpaceMapping):
                 )
         s_min_decay = sum(epsilons) ** 2
 
-        s_hat_min = torch.tensor(max(
-            sum(line.mass for line in diagram.outgoing) ** 2, s_min_decay, s_hat_min
-        ))
+        s_hat_min = torch.tensor(
+            max(
+                sum(line.mass for line in diagram.outgoing) ** 2, s_min_decay, s_hat_min
+            )
+        )
 
         # Initialize luminosity and t-channel mapping
         self.has_t_channel = len(diagram.t_channel_lines) != 0
@@ -335,11 +354,11 @@ class DiagramMapping(PhaseSpaceMapping):
             elif t_mapping == "chili":
                 if leptonic:
                     raise ValueError("chili only supports hadronic processes")
-                #TODO: allow to set ymax, ptmin
+                # TODO: allow to set ymax, ptmin
                 self.t_mapping = tChiliBlock(
                     n_lines_after_t,
-                    ymax=torch.full((n_lines_after_t,), 4.),
-                    ptmin=torch.zeros(n_lines_after_t)
+                    ymax=torch.full((n_lines_after_t,), 4.0),
+                    ptmin=torch.zeros(n_lines_after_t),
                 )
                 self.t_random_numbers += 2
             else:
@@ -371,11 +390,11 @@ class DiagramMapping(PhaseSpaceMapping):
                     continue
                 layer_invariants.append(
                     MasslessInvariantBlock(nu=1.4)
-                    if line.mass == 0. else
-                    (
+                    if line.mass == 0.0
+                    else (
                         StableInvariantBlock(mass=line.mass, nu=1.4)
-                        if line.width == 0. else
-                        BreitWignerInvariantBlock(mass=line.mass, width=line.width)
+                        if line.width == 0.0
+                        else BreitWignerInvariantBlock(mass=line.mass, width=line.width)
                     )
                 )
                 layer_decays.append(TwoParticleLAB())
@@ -387,7 +406,7 @@ class DiagramMapping(PhaseSpaceMapping):
     def map(self, inputs: TensorList, condition=None):
         random = inputs[0]
         rand = RandomNumbers(random)
-        ps_weight = 1.
+        ps_weight = 1.0
 
         # Do luminosity and get s_hat and rapidity
         if self.luminosity is None:
@@ -402,7 +421,10 @@ class DiagramMapping(PhaseSpaceMapping):
         sqrt_s_hat = s_hat.sqrt()
 
         # sample s-invariants from decays, starting from the final state particles
-        sqrt_s = [torch.full_like(sqrt_s_hat, line.mass)[:, None] for line in self.diagram.outgoing]
+        sqrt_s = [
+            torch.full_like(sqrt_s_hat, line.mass)[:, None]
+            for line in self.diagram.outgoing
+        ]
         decay_masses = []
         for layer_counts, layer_invariants in zip(
             reversed(self.diagram.s_decay_layers), reversed(self.s_decay_invariants)
@@ -411,10 +433,13 @@ class DiagramMapping(PhaseSpaceMapping):
             sqrt_s_index = 0
             layer_masses = []
             for decay_count in layer_counts:
-                sqs_clip = self.sqrt_s_epsilon if decay_count > 1 else 0.
-                sqrt_s_min.append(torch.clip(sum(
-                    sqrt_s[sqrt_s_index + i] for i in range(decay_count)
-                ), min=sqs_clip))
+                sqs_clip = self.sqrt_s_epsilon if decay_count > 1 else 0.0
+                sqrt_s_min.append(
+                    torch.clip(
+                        sum(sqrt_s[sqrt_s_index + i] for i in range(decay_count)),
+                        min=sqs_clip,
+                    )
+                )
                 layer_masses.append(sqrt_s[sqrt_s_index : sqrt_s_index + decay_count])
                 sqrt_s_index += decay_count
             decay_masses.append(layer_masses)
@@ -430,15 +455,17 @@ class DiagramMapping(PhaseSpaceMapping):
                     sqrt_s.append(sqrt_s_min[i])
                     continue
                 s_min = sqrt_s_min[i] ** 2
-                s_max = (sqrt_s_hat[:, None] - sum(sqrt_s) - sum(sqrt_s_min[i+1:])) ** 2
-                (s, ), jac = next(invariant_iter).map([rand()], condition=[s_min, s_max])
+                s_max = (
+                    sqrt_s_hat[:, None] - sum(sqrt_s) - sum(sqrt_s_min[i + 1 :])
+                ) ** 2
+                (s,), jac = next(invariant_iter).map([rand()], condition=[s_min, s_max])
                 sqrt_s.append(s.sqrt())
                 ps_weight *= jac
 
         if self.has_t_channel:
-            (p_in, p_out,), jac = self.t_mapping.map([
-                rand(self.t_random_numbers), sqrt_s_hat, torch.cat(sqrt_s, dim=1)
-            ])
+            (p_in, p_out,), jac = self.t_mapping.map(
+                [rand(self.t_random_numbers), sqrt_s_hat, torch.cat(sqrt_s, dim=1)]
+            )
             if self.t_channel_type == "chili":
                 x1 = p_in[:, 0, 0] * 2 / sqrt_s_hat
                 x2 = p_in[:, 1, 0] * 2 / sqrt_s_hat
@@ -461,7 +488,7 @@ class DiagramMapping(PhaseSpaceMapping):
                     p_out.append(k_in)
                     continue
                 m_out = torch.cat(masses, dim=1)
-                (k_out, ), jac = next(decay_iter).map([rand(2), k_in, m_out])
+                (k_out,), jac = next(decay_iter).map([rand(2), k_in, m_out])
                 if len(k_in.shape) == 1:
                     mask = k_out.isnan().any(dim=1).any(dim=1)
                 p_out.extend(k_out.unbind(dim=1))
