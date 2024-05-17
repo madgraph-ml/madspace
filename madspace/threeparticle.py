@@ -3,15 +3,15 @@
     https://freidok.uni-freiburg.de/data/154629"""
 
 
-from typing import Tuple, Optional
 import torch
-from torch import Tensor, sqrt, log, atan2, atan, tan
+from torch import sqrt, atan2
 
 from .base import PhaseSpaceMapping, TensorList
 from .helper import (
     inv_rotate_zy,
     rotate_zy,
     boost,
+    mass,
     lsquare,
     edot,
     pi,
@@ -34,7 +34,7 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         self.e1_map = UniformInvariantBlock()
         self.e2_map = UniformInvariantBlock()
 
-    def _map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs: TensorList, condition: TensorList):
         """Map from random numbers to momenta
 
         Args:
@@ -51,8 +51,10 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         del condition
         r, s, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
-        p2 = torch.zeros(r.shape[0], 4, device=r.device)
-        p3 = torch.zeros(r.shape[0], 4, device=r.device)
+        p2 = torch.zeros_like(p1)
+        p3 = torch.empty_like(p1)
+
+        # Maybe remove after debugging
         with torch.no_grad():
             if torch.any(s < 0):
                 raise ValueError(f"s needs to be always positive")
@@ -112,7 +114,7 @@ class ThreeParticleCOM(PhaseSpaceMapping):
 
         return (p_decay,), gs
 
-    def _map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -131,7 +133,7 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         # Decaying particle in lab-frame
         p0 = p_decay.sum(dim=1)
         s = lsquare(p0)
-        m_out = sqrt(lsquare(p_decay))
+        m_out = mass(p_decay)
 
         # particle features
         p1 = p_decay[:, 0]
@@ -203,7 +205,7 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         self.e1_map = UniformInvariantBlock()
         self.e2_map = UniformInvariantBlock()
 
-    def _map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs: TensorList, condition: TensorList):
         """Map from random numbers to momenta
 
         Args:
@@ -220,10 +222,11 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         del condition
         r, p0, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
-        p2 = torch.zeros(r.shape[0], 4, device=r.device)
-        p3 = torch.zeros(r.shape[0], 4, device=r.device)
+        p2 = torch.zeros_like(p1)
+        p3 = torch.empty_like(p1)
         s = lsquare(p0)
 
+        # Maybe remove after debugging
         with torch.no_grad():
             if torch.any(s < 0):
                 raise ValueError(f"s needs to be always positive")
@@ -285,7 +288,7 @@ class ThreeParticleLAB(PhaseSpaceMapping):
 
         return (p_lab,), gs
 
-    def _map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs: TensorList, condition: TensorList):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -305,7 +308,7 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         # Decaying particle in lab-frame
         p0 = p_lab.sum(dim=1, keepdim=True)
         s = lsquare(p0)
-        m_out = sqrt(lsquare(p_lab))
+        m_out = mass(p_lab)
 
         # boost into COM-frame
         p_decay = boost(p_lab, p0, inverse=True)
