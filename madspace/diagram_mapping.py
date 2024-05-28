@@ -279,13 +279,72 @@ class tDiagramMapping(PhaseSpaceMapping):
         p_out = torch.stack(p_out, dim=1).flip([1])
         return (p_in, p_out,), det
 
+    def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_ext]
+                p_in: incoming momenta with shape=(b,2,4)
+                p_out: output momenta with shape=(b,n,4)
+
+        Returns:
+            r: random numbers with shape=(b,3*n-4)
+            e_cm: COM energy with shape=(b,)
+            m_out: (virtual) masses of outgoing particles with shape=(b,n)
+            det (Tensor): det of mapping with shape=(b,)
+
+        """
+        del condition
+
+        p_in = inputs[0]
+        p_out = inputs[1]
+        det = 1.
+
+        e_cm = mass(p_in.sum(dim=1))
+        m_out = mass(p_out)
+
+        ###
+        p_t_in = p_in
+        p2_rest = p2
+        ###
+
+        cumulated_m_out = []
+        k_rest = p_out[:, 0]
+        for invariant, k in zip(
+            reversed(self.t_invariants), p_out[:, :-1].unbind(dim=1)
+        ):
+            m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
+            (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
+            k_rest, k = ks[:, 0], ks[:, 1]
+            p_out.append(k)
+            p2_rest = p2_rest - k
+            p_t_in = torch.stack([p1, p2_rest], dim=1)
+
+            p2_rest = p2_rest + k
+            ks = torch.stack((k_rest, k), dim=1)
+            (r, m_t), jac = invariant.map_inverse([ks], condition=[p_t_in]])
+            cumulated_m_out.append(m_t[:, :1])
+
+            det *= jac
+
+        sqrt_s_max = e_cm[:,None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
+        cumulated_m_out = [m_out[:,:1]]
+        for invariant, sqs, sqs_max in zip(
+            self.s_uniform_invariants, m_out[:, 1:-1].unbind(dim=1), sqrt_s_max.unbind(dim=1)
+        ):
+            s_min = (cumulated_m_out[-1] + sqs[:,None]) ** 2
+            s_max = sqs_max[:,None] ** 2
+            (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
+            cumulated_m_out.append(s.sqrt())
+            det *= jac
+
+        return (r, e_cm, m_out), r
+
 
 class DiagramMapping(PhaseSpaceMapping):
     """
     TODO:
         - support quartic vertices
-        - alternative strategy: chili + s-channel
-        - alternative strategy: rambo + s-channel
     """
     def __init__(
         self,
@@ -339,7 +398,7 @@ class DiagramMapping(PhaseSpaceMapping):
                 self.t_mapping = tChiliBlock(
                     n_lines_after_t,
                     ymax=torch.full((n_lines_after_t,), 4.),
-                    ptmin=torch.zeros(n_lines_after_t)
+                    ptmin=torch.full((n_lines_after_t,), 20.),
                 )
                 self.t_random_numbers += 2
             else:
@@ -402,7 +461,9 @@ class DiagramMapping(PhaseSpaceMapping):
         sqrt_s_hat = s_hat.sqrt()
 
         # sample s-invariants from decays, starting from the final state particles
-        sqrt_s = [torch.full_like(sqrt_s_hat, line.mass)[:, None] for line in self.diagram.outgoing]
+        sqrt_s = [
+            torch.full_like(sqrt_s_hat, line.mass)[:, None] for line in self.diagram.outgoing
+        ]
         decay_masses = []
         for layer_counts, layer_invariants in zip(
             reversed(self.diagram.s_decay_layers), reversed(self.s_decay_invariants)
@@ -431,7 +492,8 @@ class DiagramMapping(PhaseSpaceMapping):
                     continue
                 s_min = sqrt_s_min[i] ** 2
                 s_max = (sqrt_s_hat[:, None] - sum(sqrt_s) - sum(sqrt_s_min[i+1:])) ** 2
-                (s, ), jac = next(invariant_iter).map([rand()], condition=[s_min, s_max])
+                r = rand()
+                (s, ), jac = next(invariant_iter).map([r], condition=[s_min, s_max])
                 sqrt_s.append(s.sqrt())
                 ps_weight *= jac
 
@@ -462,8 +524,6 @@ class DiagramMapping(PhaseSpaceMapping):
                     continue
                 m_out = torch.cat(masses, dim=1)
                 (k_out, ), jac = next(decay_iter).map([rand(2), k_in, m_out])
-                if len(k_in.shape) == 1:
-                    mask = k_out.isnan().any(dim=1).any(dim=1)
                 p_out.extend(k_out.unbind(dim=1))
                 ps_weight *= jac
         p_out = torch.stack(p_out, dim=1)
@@ -477,4 +537,87 @@ class DiagramMapping(PhaseSpaceMapping):
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
     def map_inverse(self, inputs: TensorList, condition=None):
-        raise NotImplementedError("keine lust...")
+        del condition
+        p_ext_lab, x1x2 = inputs
+        random = []
+        ps_weight = 1.
+
+        # Undo boosts etc
+        s_hat = self.s_lab * x1x2.prod(dim=1)
+        sqrt_s_hat = s_hat.sqrt()
+        rap = 0.5 * torch.log(x1x2[:, 0] / x1x2[:, 1])[:, None]
+        if self.luminosity is None:
+            p_ext = p_ext_lab
+        else:
+            p_ext = boost_beam(p_ext_lab, rap, inverse=True)
+        p_in = p_ext[:,:2]
+        p_out = p_ext[:,2:][:, self.diagram.inverse_permutation]
+
+        p_out = p_out.unbind(dim=1)[::-1]
+        s_invariant_r = []
+        for layer_counts, layer_decays, layer_invariants in zip(
+            reversed(self.diagram.s_decay_layers),
+            reversed(self.s_decays),
+            reversed(self.s_decay_invariants)
+        ):
+            sqrt_s = lsquare(torch.stack(p_out, dim=1)).sqrt()
+            sqrt_s_mins = []
+            p_out_iter = iter(p_out)
+            p_out = []
+            decay_iter = reversed(layer_decays)
+            for count in reversed(layer_counts):
+                if count == 1:
+                    k_out = next(p_out_iter)
+                    sqrt_s_min.append(mass(k_out))
+                    p_out.append(next(p_out_iter))
+                    continue
+
+                k_out = torch.stack([next(p_out_iter) for _ in range(count)][::-1], dim=1)
+                (r, k_in, m_out), jac = next(decay_iter).map_inverse([k_out])
+                ps_weight *= jac
+                p_out.append(k_in)
+                random.append(r)
+                sqrt_s_mins.append(
+                    torch.clip(m_out.sum(dim=1), min=self.sqrt_s_epsilon)[:,None]
+                )
+
+            if len(layer_invariants) == 0:
+                assert not self.has_t_channel
+                continue
+
+            invariant_iter = reversed(layer_invariants)
+            layer_s_invariant_r = []
+            sqrt_s_sum = 0.
+            for i, (count, sqrt_s_min, k_in) in enumerate(
+                zip(layer_counts, sqrt_s_mins, reversed(p_out))
+            ):
+                s = lsquare(k_in)[:, None]
+                if count == 1:
+                    sqrt_s_sum += s.sqrt()
+                    continue
+                s_min = sqrt_s_min.square()
+                s_max = (sqrt_s_hat[:, None] - sqrt_s_sum - sum(sqrt_s_min[i+1:])).square()
+                sqrt_s_sum += s.sqrt()
+                (r,), jac = next(invariant_iter).map_inverse([s], condition=[s_min, s_max])
+                layer_s_invariant_r.append(r)
+                ps_weight *= jac
+            s_invariant_r.append(layer_s_invariant_r)
+
+        if self.has_t_channel:
+            (r, sqrt_s_hat, sqrt_s), jac = self.t_mapping.map_inverse(
+                [p_in, torch.stack(p_out, dim=1)]
+            )
+            sqrt_s = sqrt_s[:,:,None].unbind(dim=1)
+            random.append(r)
+            ps_weight *= jac
+
+        for layer_s_invariant_r in reversed(s_invariant_r):
+            random.extend(reversed(layer_s_invariant_r))
+
+        # Undo lumi param
+        (r,), jac = self.luminosity.map_inverse([x1x2])
+        ps_weight *= jac
+        random.append(r)
+
+        r = torch.cat(random[::-1], dim=1)
+        return (r,), ps_weight / self.pi_factors

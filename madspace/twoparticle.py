@@ -29,6 +29,7 @@ from .invariants import (
     MasslessInvariantBlock,
     StableInvariantBlock,
 )
+from icecream import ic
 
 
 class TwoParticleCOM(PhaseSpaceMapping):
@@ -67,7 +68,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
         r1, r2 = r[:, 0], r[:, 1]
 
         # Define the angles
-        phi = 2 * pi * r1
+        phi = 2 * pi * r1 - pi
         costheta = 2 * r2 - 1
         g_angular = 4 * pi
 
@@ -119,7 +120,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
-        r1 = phi / 2 / pi
+        r1 = phi / 2 / pi + 0.5
         r2 = (costheta + 1) / 2
         g_angular = 4 * pi
 
@@ -187,7 +188,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         r1, r2 = r[:, 0], r[:, 1]
 
         # Define the angles
-        phi = 2 * pi * r1
+        phi = 2 * pi * r1 - pi
         costheta = 2 * r2 - 1
         g_angular = 4 * pi
 
@@ -241,7 +242,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
-        r1 = phi / 2 / pi
+        r1 = phi / (2 * pi) + 0.5
         r2 = (costheta + 1) / 2
         g_angular = 4 * pi
 
@@ -335,7 +336,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         m2 = m_out[:, 1]
 
         # Get phi angle
-        phi = 2 * r1 * pi
+        phi = 2 * r1 * pi - pi
         det_phi = 2 * pi
 
         # get t_min and max
@@ -408,7 +409,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
 
         # Get the random numbers
-        r1 = phi / 2 / pi
+        r1 = phi / 2 / pi + 0.5
         det_phi_inv = 1 / (2 * pi)
         (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)
@@ -494,7 +495,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         m2 = m_out[:, 1]
 
         # Get phi angle
-        phi = 2 * r1 * pi
+        phi = 2 * r1 * pi - pi
         det_phi = 2 * pi
 
         # get t_min and max
@@ -570,7 +571,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
 
         # Get the random numbers
-        r1 = phi / 2 / pi
+        r1 = phi / 2 / pi + 0.5
         det_phi_inv = 1 / (2 * pi)
         (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
         r = torch.stack([r1, r2], dim=1)

@@ -246,8 +246,8 @@ class ResonantLuminosity(_Luminosity):
             shat,
             self.mass,
             self.width,
-            self.smin,
-            self.smax,
+            self.shat_min,
+            self.shat_max,
             inverse=True,
         )
         return r1, s_det_inv
