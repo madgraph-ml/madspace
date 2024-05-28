@@ -9,7 +9,7 @@ WW = 2.085
 MZ = 91.1876
 WZ = 2.4952
 
-nsamples = 3
+nsamples = 300
 
 
 def print_info(diagram):
@@ -48,11 +48,14 @@ vbs = Diagram(
 )
 dmap = DiagramMapping(vbs, torch.tensor(13000.**2))
 (p_auto, x_auto), jac_auto = dmap.map([r])
+(r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
 print_info(vbs)
 print("Δp max    ", (p_auto - p_hand).abs().max())
 print("Δx max    ", (x_auto - x_hand).abs().max())
 print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+print("inv Δr    ", (r - r_inv).abs().max())
+print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
 
 print()
 print("====== WWW ======")
@@ -80,11 +83,14 @@ vbsmap = SingleChannelWWW(
 www = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3], vertices=[v1, v2, v3])
 dmap = DiagramMapping(www, torch.tensor(13000.**2))
 (p_auto, x_auto), jac_auto = dmap.map([r])
+(r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
 print_info(www)
 print("Δp max    ", (p_auto - p_hand).abs().max())
 print("Δx max    ", (x_auto - x_hand).abs().max())
 print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+print("inv Δr    ", (r - r_inv).abs().max())
+print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
 
 print()
 print("====== llvvA ======")
@@ -138,21 +144,24 @@ for leptonic in [False, True]:
     )
     dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic)
     (p_auto, x_auto), jac_auto = dmap.map([r])
+    (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
-    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="rambo")
-    (p_rambo, x_rambo), jac_rambo = dmap.map([r])
+    #dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="rambo")
+    #(p_rambo, x_rambo), jac_rambo = dmap.map([r])
 
-    if not leptonic:
-        dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="chili")
-        (p_chili, x_chili), jac_chili = dmap.map([r])
-        ic(p_auto)
-        ic(p_rambo)
-        ic(p_chili)
+    #if not leptonic:
+    #    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="chili")
+    #    (p_chili, x_chili), jac_chili = dmap.map([r])
+    #    ic(p_auto)
+    #    ic(p_rambo)
+    #    ic(p_chili)
 
     print_info(llvva)
     print("Δp max    ", (p_auto - p_hand).abs().max())
     print("Δx max    ", (x_auto - x_hand).abs().max())
     print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+    print("inv Δr    ", (r - r_inv).abs().max())
+    print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
 
 print()
 print("====== ww_llvv ======")
@@ -205,8 +214,11 @@ for leptonic in [False, True]:
         ww_llvv, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, s_min_epsilon=0.
     )
     (p_auto, x_auto), jac_auto = dmap.map([r])
+    (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
     print_info(ww_llvv)
     print("Δp max    ", (p_auto - p_hand).abs().max())
     print("Δx max    ", (x_auto - x_hand).abs().max())
     print("Δjac max  ", (jac_auto - jac_hand).abs().max())
+    print("inv Δr    ", (r - r_inv).abs().max())
+    print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())

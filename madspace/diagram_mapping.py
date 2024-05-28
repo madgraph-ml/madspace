@@ -282,7 +282,8 @@ class tDiagramMapping(PhaseSpaceMapping):
             reversed(m_out[:, 1:].unbind(dim=1)),
         ):
             m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
-            (ks,), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
+            r = rand(2)
+            (ks,), jac = invariant.map([r, m_t], condition=[p_t_in])
             k_rest, k = ks[:, 0], ks[:, 1]
             p_out.append(k)
             p2_rest = p2_rest - k
@@ -316,45 +317,44 @@ class tDiagramMapping(PhaseSpaceMapping):
         p_out = inputs[1]
         det = 1.
 
+        random = []
+
         e_cm = mass(p_in.sum(dim=1))
         m_out = mass(p_out)
+        cum_p = p_out.cumsum(dim=1)
+        cum_p_reverse = torch.cat(
+            [torch.zeros_like(p_out[:, :1]), p_out[:, 2:].flip([1])], dim=1
+        ).cumsum(dim=1)
+        ss = lsquare(cum_p)
+        s_maxs = (e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1)).square()
+        s_mins = (ss[:, :-2].sqrt() + m_out[:, 1:-1]).square()
+        p_t_ins = torch.stack(
+            [p_in[:,:1].expand(-1, cum_p_reverse.shape[1], -1), p_in[:,1:] - cum_p_reverse],
+            dim=2
+        )
+        k_rest_k = torch.stack([cum_p[:, :-1], p_out[:, 1:]], dim=2)
 
-        ###
-        p_t_in = p_in
-        p2_rest = p2
-        ###
-
-        cumulated_m_out = []
-        k_rest = p_out[:, 0]
-        for invariant, k in zip(
-            reversed(self.t_invariants), p_out[:, :-1].unbind(dim=1)
+        for invariant, s, s_min, s_max in zip(
+            self.s_uniform_invariants,
+            ss[:, 1:-1].unbind(dim=1),
+            s_mins.unbind(dim=1),
+            s_maxs.unbind(dim=1),
         ):
-            m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
-            (ks, ), jac = invariant.map([rand(2), m_t], condition=[p_t_in])
-            k_rest, k = ks[:, 0], ks[:, 1]
-            p_out.append(k)
-            p2_rest = p2_rest - k
-            p_t_in = torch.stack([p1, p2_rest], dim=1)
-
-            p2_rest = p2_rest + k
-            ks = torch.stack((k_rest, k), dim=1)
-            (r, m_t), jac = invariant.map_inverse([ks], condition=[p_t_in])
-            cumulated_m_out.append(m_t[:, :1])
-
+            (r,), jac = invariant.map_inverse(
+                [s[:, None]], condition=[s_min[:, None], s_max[:, None]]
+            )
+            random.append(r)
             det *= jac
 
-        sqrt_s_max = e_cm[:,None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
-        cumulated_m_out = [m_out[:,:1]]
-        for invariant, sqs, sqs_max in zip(
-            self.s_uniform_invariants, m_out[:, 1:-1].unbind(dim=1), sqrt_s_max.unbind(dim=1)
+        for invariant, p_t_in, ks in zip(
+            self.t_invariants, p_t_ins.unbind(dim=1), reversed(k_rest_k.unbind(dim=1))
         ):
-            s_min = (cumulated_m_out[-1] + sqs[:,None]) ** 2
-            s_max = sqs_max[:,None] ** 2
-            (s, ), jac = invariant.map([rand()], condition=[s_min, s_max])
-            cumulated_m_out.append(s.sqrt())
+            (r, _), jac = invariant.map_inverse([ks], condition=[p_t_in])
+            random.append(r)
             det *= jac
 
-        return (r, e_cm, m_out), r
+        r = torch.cat(random, dim=1)
+        return (r, e_cm, m_out), det
 
 
 class DiagramMapping(PhaseSpaceMapping):
@@ -589,8 +589,8 @@ class DiagramMapping(PhaseSpaceMapping):
             for count in reversed(layer_counts):
                 if count == 1:
                     k_out = next(p_out_iter)
-                    sqrt_s_min.append(mass(k_out))
-                    p_out.append(next(p_out_iter))
+                    sqrt_s_mins.append(mass(k_out)[:, None])
+                    p_out.append(k_out)
                     continue
 
                 k_out = torch.stack([next(p_out_iter) for _ in range(count)][::-1], dim=1)
@@ -610,14 +610,14 @@ class DiagramMapping(PhaseSpaceMapping):
             layer_s_invariant_r = []
             sqrt_s_sum = 0.
             for i, (count, sqrt_s_min, k_in) in enumerate(
-                zip(layer_counts, sqrt_s_mins, reversed(p_out))
+                zip(layer_counts, reversed(sqrt_s_mins), reversed(p_out))
             ):
                 s = lsquare(k_in)[:, None]
                 if count == 1:
                     sqrt_s_sum += s.sqrt()
                     continue
                 s_min = sqrt_s_min.square()
-                s_max = (sqrt_s_hat[:, None] - sqrt_s_sum - sum(sqrt_s_min[i+1:])).square()
+                s_max = (sqrt_s_hat[:, None] - sqrt_s_sum - sum(sqrt_s_mins[:-i-1])).square()
                 sqrt_s_sum += s.sqrt()
                 (r,), jac = next(invariant_iter).map_inverse([s], condition=[s_min, s_max])
                 layer_s_invariant_r.append(r)
@@ -626,7 +626,7 @@ class DiagramMapping(PhaseSpaceMapping):
 
         if self.has_t_channel:
             (r, sqrt_s_hat, sqrt_s), jac = self.t_mapping.map_inverse(
-                [p_in, torch.stack(p_out, dim=1)]
+                [p_in, torch.stack(p_out, dim=1).flip([1])]
             )
             sqrt_s = sqrt_s[:,:,None].unbind(dim=1)
             random.append(r)
@@ -636,9 +636,10 @@ class DiagramMapping(PhaseSpaceMapping):
             random.extend(reversed(layer_s_invariant_r))
 
         # Undo lumi param
-        (r,), jac = self.luminosity.map_inverse([x1x2])
-        ps_weight *= jac
-        random.append(r)
+        if self.luminosity is not None:
+            (r,), jac = self.luminosity.map_inverse([x1x2])
+            ps_weight *= jac
+            random.append(r)
 
         r = torch.cat(random[::-1], dim=1)
         return (r,), ps_weight / self.pi_factors

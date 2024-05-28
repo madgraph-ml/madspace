@@ -367,9 +367,8 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         return (p_out,), det_t * det_two_particle_inv * det_phi
 
     def map_inverse(self, inputs: TensorList, condition=None):
-        del condition
         p_out = inputs[0]
-        p_in = condition[1]
+        p_in = condition[0]
 
         # Extraxt incoming momenta
         ptot = p_in.sum(dim=1)
@@ -401,8 +400,8 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
-        cos_min = (-1.0) * torch.ones_like(k1)
-        cos_max = (+1.0) * torch.ones_like(k1)
+        cos_min = (-1.0) * torch.ones_like(s)
+        cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
@@ -527,9 +526,8 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         return (p_out,), det_t * det_two_particle_inv * det_phi
 
     def map_inverse(self, inputs: TensorList, condition=None):
-        del condition
         p_out = inputs[0]
-        p_in = condition[1]
+        p_in = condition[0]
 
         # Extraxt incoming momenta
         ptot = p_in.sum(dim=1)
@@ -563,8 +561,8 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
-        cos_min = (-1.0) * torch.ones_like(k1)
-        cos_max = (+1.0) * torch.ones_like(k1)
+        cos_min = (-1.0) * torch.ones_like(s)
+        cos_max = (+1.0) * torch.ones_like(s)
         tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
