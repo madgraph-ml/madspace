@@ -5,14 +5,12 @@
 """
 
 
-from typing import Tuple, Optional
+from typing import Optional
 import torch
-from torch import Tensor, sqrt, log, atan2
+from torch import Tensor, sqrt, atan2
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import (
-    two_particle_density,
-    tinv_two_particle_density,
+from .functional.kinematics import (
     kaellen,
     pmag,
     rotate_zy,
@@ -22,6 +20,7 @@ from .helper import (
     mass,
     pi,
 )
+from .functional.ps_utils import two_particle_density, tinv_two_particle_density
 from .functional.tchannel import invt_to_costheta, costheta_to_invt
 from .invariants import (
     BreitWignerInvariantBlock,
@@ -181,7 +180,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         s = lsquare(p0)
 
-        #with torch.no_grad():
+        # with torch.no_grad():
         #    if torch.any(s < 0):
         #        raise ValueError(f"s needs to be always positive")
 

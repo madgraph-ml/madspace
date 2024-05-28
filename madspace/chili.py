@@ -9,7 +9,7 @@ from math import pi
 from torch import Tensor, sqrt, log, sinh, cos, sin, exp
 
 from .base import PhaseSpaceMapping, TensorList
-from .helper import rapidity, pT2, lsquare, phi
+from .functional.kinematics import rapidity, pT2, lsquare, phi
 
 
 class tChiliBlock(PhaseSpaceMapping):

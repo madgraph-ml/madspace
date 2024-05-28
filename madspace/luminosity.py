@@ -256,7 +256,7 @@ class ResonantLuminosity(_Luminosity):
 class FlatLuminosity(_Luminosity):
     """
     Implement luminosity mapping which maps out tau flat:
-        tau = tau_min + (1 - tau_min) * r1
+        tau = tau_min + (tau_max - tau_min) * r1
     """
 
     def __init__(

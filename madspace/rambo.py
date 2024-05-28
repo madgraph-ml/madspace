@@ -8,17 +8,12 @@ from .rootfinder.roots import get_u_parameter, get_xi_parameter
 
 from .base import PhaseSpaceMapping, TensorList
 from .luminosity import Luminosity, FlatLuminosity, ResonantLuminosity
-from .helper import (
-    MINKOWSKI,
+from .functional.kinematics import boost, boost_beam, mass, esquare, lsquare
+from .functional.ps_utils import (
+    build_p_in,
     map_fourvector_rambo,
     map_fourvector_rambo_diet,
     two_body_decay_factor,
-    boost,
-    boost_beam,
-    mass,
-    esquare,
-    lsquare,
-    build_p_in,
 )
 
 
@@ -539,8 +534,11 @@ class tRamboBlock(PhaseSpaceMapping):
         # Get massive density corr. factor
         w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
 
-        #p_ext = torch.cat([p_in, k_out], dim=1)
-        return (p_in, k_out,), w_m * w0
+        # p_ext = torch.cat([p_in, k_out], dim=1)
+        return (
+            p_in,
+            k_out,
+        ), w_m * w0
 
     def map_inverse(self, inputs: TensorList, condition=None):
         """Map from momenta to random numbers
