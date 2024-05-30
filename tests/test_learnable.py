@@ -88,8 +88,6 @@ uni2_inv = UniformInvariantBlock()
 bw2_inv = BreitWignerInvariantBlock(mass=95., width=4.)
 smap2 = smap1.shared_mapping(uni2_inv)
 
-print(smap1.extra_params_c is smap2.extra_params_c)
-
 combined = nn.ModuleList([smap1, smap2])
 print("Trainable parameters:", count_parameters(combined))
 
@@ -160,5 +158,14 @@ for i in range(1000):
     if (i+1) % 50 == 0:
         print(i + 1, loss.item())
 
+
 print()
 print("median |Δlog jac|", (jac_fw.log() + jac_inv.log()).abs().median().item())
+
+print()
+print("Check if the inverse mapping works:")
+r = torch.rand((n, 2))
+(p_decay,), jac_fw = smap.map([r, s, m_out])
+(r_inv, _, _), jac_inv = smap.map_inverse([p_decay])
+print("max |Δr|", (r - r_inv).abs().max().item())
+print("max |Δjac|", (jac_fw * jac_inv - 1).abs().max().item())

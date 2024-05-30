@@ -9,6 +9,16 @@ from .base import PhaseSpaceMapping, TensorList, ShapeList
 from .functional.splines import unconstrained_rational_quadratic_spline
 
 class SplineMapping(PhaseSpaceMapping):
+    """
+    Learnable mapping based on RQ splines that wraps around other phase space mappings.
+    It assumes that the first input of the wrapped mapping is a tensor with random numbers
+    in the unit interval. Each component of the random numbers is transformed once using a
+    RQ spline. In the simplest case, the spline bin widths/heights/derivatives are learnable
+    parameters. The class also allows for more complex conditional transformations where
+    the spline w/h/d are predicted by neural networks, making the mapping a minimal
+    normalizing flow.
+    """
+
     def __init__(
         self,
         mapping: PhaseSpaceMapping,
@@ -25,6 +35,35 @@ class SplineMapping(PhaseSpaceMapping):
         min_bin_height: float = 1e-3,
         min_derivative: float = 1e-3,
     ):
+        """
+        Constructs spline mapping.
+
+        Args:
+            mapping: Phase space mapping that the learnable mapping wraps around. The first
+                input to the mapping have to be random numbers from the unit interval.
+            flow_dims_c: Dimensions of the tensors that the trainable mapping is
+                conditioned on.
+            extra_params_c: Trainable parameters that are used as extra conditional inputs to
+                the trainable mapping. This argument is only useful when multiple mappings
+                otherwise share the same parameters (see shared_mapping) as these are the only
+                parameters that are different between the mappings, allowing for some amount
+                of specialization.
+            correlations: Only relevant for mappings with more than one random variable.
+                If "none", all spline transformations are independent. If "autoregressive",
+                the transformation of the n-th component is conditioned on the previous n-1
+                component. If "all", each transformed component is conditioned on all other
+                components.
+            permutation: Specifies the order in which the transformations are performed. Only
+                relevant if the correlation mode is "autoregressive" or "all".
+            layers: number of subnet layers
+            hidden_dim: number of nodes of the subnet hidden layers
+            bins: number of spline bins
+            activation: subnet activation function
+            periodic: list of component indices for which periodic splines are used
+            min_bin_width: minimum spline bin width
+            min_bin_height: minimum spline bin height
+            min_derivative: minimum spline derivative
+        """
         mapping_dims_c = [] if mapping.dims_c is None else mapping.dims_c
         dims_in = mapping.dims_in
         dims_out = mapping.dims_out
@@ -70,7 +109,18 @@ class SplineMapping(PhaseSpaceMapping):
         else:
             self.extra_params_c = nn.Parameter(torch.zeros(extra_params_c))
 
-    def shared_mapping(self, mapping: PhaseSpaceMapping):
+    def shared_mapping(self, mapping: PhaseSpaceMapping) -> "SplineMapping":
+        """
+        Returns a copy of the mapping, where only the wrapped mapping and (if extra_params_c
+        is larger than 0), the additional conditional parameters are replaced. All other
+        subnets and trainable parameters are shared between the two mappings.
+
+        Args:
+            mapping: mapping that is wrapped by the returned spline mapping
+
+        Returns:
+            shared: copied mapping
+        """
         shared = copy(self)
         shared._parameters = copy(self._parameters)
         shared._modules = copy(self._modules)
@@ -79,6 +129,50 @@ class SplineMapping(PhaseSpaceMapping):
             old_params_c = self.extra_params_c
             shared.extra_params_c = nn.Parameter(torch.zeros_like(self.extra_params_c))
         return shared
+
+    def map(self, inputs: TensorList, condition=None):
+        """
+        Performs the forward mapping
+
+        Args:
+            inputs: list of at least one tensor
+                r: random numbers with shape=(b, n_random)
+                all other inputs are passed on to the wrapped mapping
+            condition: list of tensors
+                first: conditions that are passed on to the wrapped mapping
+                then: conditions that are used as inputs to the subnets
+
+        Returns:
+            out: outputs of the wrapped mapping
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        r, rest = inputs[0], inputs[1:]
+        c_mapping, c_flow = self._split_condition(condition, r.shape[0])
+        x, jac_flow = self._map_flow(r, c_flow, inverse=False)
+        out, jac_mapping = self.mapping.map([x, *rest], c_mapping)
+        return out, jac_flow * jac_mapping
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        """
+        Performs the inverse mapping
+
+        Args:
+            inputs: list of tensors
+                inputs of the wrapped mapping
+            condition: list of tensors
+                first: conditions that are passed on to the wrapped mapping
+                then: conditions that are used as inputs to the subnets
+
+        Returns:
+            outputs of the wrapped mapping
+                r: random numbers with shape=(b, n_random)
+                all other outputs are passed on from the wrapped mapping
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        c_mapping, c_flow = self._split_condition(condition, inputs[0].shape[0])
+        (x, *rest), jac_mapping = self.mapping.map_inverse(inputs, c_mapping)
+        r, jac_flow = self._map_flow(x, c_flow, inverse=True)
+        return (r, *rest), jac_flow * jac_mapping
 
     def _build_subnet(
         self,
@@ -104,19 +198,6 @@ class SplineMapping(PhaseSpaceMapping):
         module = nn.Sequential(*modules)
         self.submodules.append(module)
         return module
-
-    def map(self, inputs: TensorList, condition=None):
-        r, rest = inputs[0], inputs[1:]
-        c_mapping, c_flow = self._split_condition(condition, r.shape[0])
-        x, jac_flow = self._map_flow(r, c_flow, inverse=False)
-        out, jac_mapping = self.mapping.map([x, *rest], c_mapping)
-        return out, jac_flow * jac_mapping
-
-    def map_inverse(self, inputs: TensorList, condition=None):
-        (x, *rest), jac_mapping = self.mapping.map_inverse(inputs, c_mapping)
-        c_mapping, c_flow = self._split_condition(condition, x.shape[0])
-        r, jac_flow = self._map_flow(x, c_flow, inverse=True)
-        return (r, *rest), jac_flow * jac_mapping
 
     def _split_condition(self, condition: TensorList | None, batch_dim: int):
         if condition is None:
