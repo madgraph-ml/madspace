@@ -659,6 +659,7 @@ class Mahambo(PhaseSpaceMapping):
         lumi_mass: Tensor = None,
         lumi_width: Tensor = None,
         masses: list[float] = None,
+        e_min: float = 0.0,
     ):
         self.e_beam = e_beam
         self.nparticles = nparticles
@@ -666,10 +667,10 @@ class Mahambo(PhaseSpaceMapping):
         if masses is not None:
             self.masses = torch.tensor(masses)
             assert len(self.masses) == self.nparticles
-            self.e_min = self.masses.sum
+            self.e_min = torch.max(self.masses.sum, torch.tensor(e_min))
         else:
             self.masses = masses
-            self.e_min = torch.tensor(0.0)
+            self.e_min = torch.tensor(e_min)
 
         dims_in = [(3 * nparticles - 2,)]
         dims_out = [(nparticles, 4), (2,)]
