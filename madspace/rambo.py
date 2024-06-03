@@ -45,6 +45,8 @@ class Rambo(PhaseSpaceMapping):
         dims_out = [(nparticles, 4)]
         super().__init__(dims_in, dims_out)
 
+        self.pi_factors = (2 * pi) ** (4 - 3 * self.nparticles)
+
     def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
@@ -129,7 +131,7 @@ class Rambo(PhaseSpaceMapping):
             * e_cm ** (2 * self.nparticles - 4)
             / (gamma(self.nparticles) * gamma(self.nparticles - 1))
         )
-        return w0
+        return w0 * self.pi_factors
 
     def _massive_weight(
         self,
@@ -197,6 +199,8 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         dims_in = [(3 * nparticles - 4,), ()]
         dims_out = [(nparticles, 4)]
+
+        self.pi_factors = (2 * pi) ** (4 - 3 * self.nparticles)
 
         super().__init__(dims_in, dims_out)
 
@@ -372,7 +376,7 @@ class RamboOnDiet(PhaseSpaceMapping):
             * e_cm ** (2 * self.nparticles - 4)
             / (gamma(self.nparticles) * gamma(self.nparticles - 1))
         )
-        return w0
+        return w0 * self.pi_factors
 
     def _massive_weight(
         self,
