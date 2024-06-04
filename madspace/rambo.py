@@ -558,7 +558,7 @@ class tRamboBlock(PhaseSpaceMapping):
         del condition
         # Get input momenta
         p_ext = inputs[0]
-        k = p_ext[:, :-2]
+        k = p_ext[:, 2:]
         e_cm = sqrt(lsquare(k.sum(dim=1)))
         m_out = mass(k)  # has shape (b,n)
         w0 = self._massles_weight(e_cm)
