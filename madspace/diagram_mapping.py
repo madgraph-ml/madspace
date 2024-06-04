@@ -424,7 +424,7 @@ class DiagramMapping(PhaseSpaceMapping):
                 raise ValueError(f"Unknown t-channel mapping {t_mapping}")
         elif not leptonic:
             s_line = diagram.s_channel_lines[0]
-            if self.diagram.s_channel_lines[0] is not None:
+            if s_line.mass != 0.:
                 self.luminosity = ResonantLuminosity(
                     s_lab, s_line.mass, s_line.width, s_hat_min
                 )
