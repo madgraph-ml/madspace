@@ -671,7 +671,7 @@ class Mahambo(PhaseSpaceMapping):
         if masses is not None:
             self.masses = torch.tensor(masses)
             assert len(self.masses) == self.nparticles
-            self.e_min = torch.max(self.masses.sum, torch.tensor(e_min))
+            self.e_min = torch.max(self.masses.sum(), torch.tensor(e_min))
         else:
             self.masses = masses
             self.e_min = torch.tensor(e_min)
