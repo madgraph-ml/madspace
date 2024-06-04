@@ -183,12 +183,12 @@ class SingleChannelWWW(PhaseSpaceMapping):
         (r_d, k12, _), det_decay_inv = self.decay.map_inverse([k1k2])
 
         # Undo t-channel 2->2
-        k12k3 = torch.concat([k12, k3])
+        k12k3 = torch.cat([k12[:,None], k3], dim=1)
         (r_t1, _), det_t1_inv = self.t1.map_inverse([k12k3], condition=[p_in])
 
         # Undo s-channel sampling
         s12 = lsquare(k12)[:, None]
-        s12_min = torch.zeros_like(s12)
+        s12_min = (2 * self.mw) ** 2 * torch.ones_like(s12)
         s12_max = (sqrt(s_hat[:, None]) - self.mw) ** 2
         (r_s12,), det_s12_inv = self.s12.map_inverse(
             [s12], condition=[s12_min, s12_max]
@@ -198,7 +198,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
         (r_lumi,), det_lumi_inv = self.luminosity.map_inverse([x1x2])
 
         # Pack all together
-        r = torch.cat([r_lumi, r_t1, r_s12, r_d])
+        r = torch.cat([r_lumi, r_s12, r_t1, r_d], dim=1)
         r_weight = det_lumi_inv * det_s12_inv * det_t1_inv * det_decay_inv
 
         return (r,), r_weight / self.pi_factors
