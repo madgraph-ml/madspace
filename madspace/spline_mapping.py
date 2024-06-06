@@ -30,6 +30,7 @@ class SplineMapping(PhaseSpaceMapping):
         hidden_dim: int = 32,
         bins: int = 10,
         activation: type[nn.Module] = nn.ReLU,
+        bilinear: bool = True,
         periodic: list[int] = [],
         min_bin_width: float = 1e-3,
         min_bin_height: float = 1e-3,
@@ -59,6 +60,7 @@ class SplineMapping(PhaseSpaceMapping):
             hidden_dim: number of nodes of the subnet hidden layers
             bins: number of spline bins
             activation: subnet activation function
+            bilinear: build flow with bilinear operation instead of subnet
             periodic: list of component indices for which periodic splines are used
             min_bin_width: minimum spline bin width
             min_bin_height: minimum spline bin height
@@ -78,9 +80,10 @@ class SplineMapping(PhaseSpaceMapping):
         self.mapping = mapping
         self.correlations = correlations
         self.bins = bins
-        self.layers = layers
+        self.layers = 1 if bilinear else layers
         self.hidden_dim = hidden_dim
         self.activation = activation
+        self.bilinear = bilinear
         self.min_bin_width = min_bin_width
         self.min_bin_height = min_bin_height
         self.min_derivative = min_derivative
@@ -184,6 +187,9 @@ class SplineMapping(PhaseSpaceMapping):
             self.subparams.append(param)
             return param
 
+        if self.bilinear:
+            dims_in = dims_in * (dims_in + 3) // 2
+
         modules = []
         layer_dim = dims_in
         for i in range(self.layers - 1):
@@ -233,6 +239,14 @@ class SplineMapping(PhaseSpaceMapping):
                     c_all = torch.cat((x[:, :i], c), dim=1)
                 elif self.correlations == "all":
                     c_all = torch.cat((x[:, :i], x[:, i+1:], c), dim=1)
+
+                if self.bilinear:
+                    bilin = c_all[:,:,None] * c_all[:,None,:]
+                    indices = torch.triu_indices(
+                        c_all.shape[1], c_all.shape[1], device=c_all.device
+                    )
+                    c_all = torch.cat((c_all, bilin[:, indices[0], indices[1]]), dim=1)
+
                 theta = subnet(c_all)
 
             x[:, i:i+1], log_jac = unconstrained_rational_quadratic_spline(

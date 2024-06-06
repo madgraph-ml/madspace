@@ -82,7 +82,7 @@ class SingleChannelWWW(PhaseSpaceMapping):
         # Define mappings
         self.luminosity = Luminosity(s_lab, self.s_hat_min)  # 2dof
         self.t1 = tInvariantTwoParticleCOM(nu=1.4)  # 2dof
-        self.s12 = BreitWignerInvariantBlock(mz, wz)  # 1 dof
+        self.s12 = UniformInvariantBlock() #BreitWignerInvariantBlock(mz, wz)  # 1 dof
         self.decay = TwoParticleLAB()  # 2 dof
 
         # Get correct factors of pi

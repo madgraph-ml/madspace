@@ -79,6 +79,9 @@ vbsmap = SingleChannelWWW(
     torch.tensor(13000.**2), torch.tensor(MW), torch.tensor(MZ), torch.tensor(WZ)
 )
 (p_hand, x_hand), jac_hand = vbsmap.map([r])
+(r_hand_inv, ), jac_hand_inv = vbsmap.map_inverse([p_hand, x_hand])
+print("inv Δr    ", (r - r_hand_inv).abs().max())
+print("inv Δjac  ", (jac_hand * jac_hand_inv - 1.).abs().max())
 
 www = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3], vertices=[v1, v2, v3])
 dmap = DiagramMapping(www, torch.tensor(13000.**2))
