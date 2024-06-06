@@ -294,7 +294,6 @@ class RamboOnDiet(PhaseSpaceMapping):
             k_out = torch.empty_like(p_out)
             k_out[:, :, 0] = sqrt(m**2 + xi[:, :, 0] ** 2 * p_out[:, :, 0] ** 2)
             k_out[:, :, 1:] = xi * p_out[:, :, 1:]
-
             # Get massive density corr. factor
             w_m = self._massive_weight(k_out, p_out, xi[:, 0, 0])
 
@@ -319,7 +318,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         del condition
         # Get input momenta
         p_ext = inputs[0]
-        k = p_ext[:, :-2]
+        k = p_ext[:, 2:]
         e_cm = sqrt(lsquare(k.sum(dim=1)))
         w0 = self._massles_weight(e_cm)
 
@@ -328,7 +327,6 @@ class RamboOnDiet(PhaseSpaceMapping):
         if self.masses is not None:
             # Define masses
             m = self.masses[None, ...]
-
             # solve for xi in massive case, see Ref. [1], here analytic result possible!
             xi = torch.sum(sqrt(k[:, :, 0] ** 2 - m**2), dim=-1) / e_cm
 
@@ -368,7 +366,7 @@ class RamboOnDiet(PhaseSpaceMapping):
 
         # Concat angular and energy random numbers
         r = torch.cat([ru, rcos, rphi], dim=-1)
-        return (r, e_cm), 1 / wm / w0
+        return (r, e_cm), 1.0 / w0 / wm
 
     def _massles_weight(self, e_cm):
         w0 = (
@@ -560,7 +558,7 @@ class tRamboBlock(PhaseSpaceMapping):
         del condition
         # Get input momenta
         p_ext = inputs[0]
-        k = p_ext[:, :-2]
+        k = p_ext[:, 2:]
         e_cm = sqrt(lsquare(k.sum(dim=1)))
         m_out = mass(k)  # has shape (b,n)
         w0 = self._massles_weight(e_cm)
