@@ -15,6 +15,7 @@ from .functional.ps_utils import (
     map_fourvector_rambo_diet,
     two_body_decay_factor,
 )
+from .spline_mapping import SplineMapping
 
 
 class Rambo(PhaseSpaceMapping):
@@ -832,6 +833,150 @@ class tMahamboBlock(PhaseSpaceMapping):
         # Get rambo momenta
         e_cm = sqrt(x1x2.prod(dim=1) * self.s_lab)
         (p_com,), w_rambo = self.rambo.map([r_rambo, e_cm, m_out])
+
+        # Get output momenta an full ps-weight
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]  # needs shape (b,1)
+        p_lab = boost_beam(p_com, rap)
+        ps_weight = lumi_det * w_rambo
+
+        return (p_lab, x1x2), ps_weight
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        """Map from momenta to random numbers
+
+        Args:
+            inputs: list of tensors [p_lab, x1x2]
+                p_lab: external momenta with shape=(b,n+2,4)
+                x1x2: pdf fractions with shape=(b,2)
+
+        Returns:
+            r (Tensor): random numbers with shape=(b,3*n-2)
+            m_out (Tensor): (virtual) masses of outgoing particles with shape=(b,n)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        p_lab = inputs[0]
+        x1x2 = inputs[1]
+
+        # Get rapidities
+        rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]
+
+        # Get lumi rands
+        (r_lumi,), det_lumi_inv = self.luminosity.map_inverse([x1x2])
+
+        # boost into com frame
+        p_com = boost_beam(p_lab, rap, inverse=True)
+
+        # Get rambo random numbers
+        (r_rambo, _, m_out), w_rambo_inv = self.rambo.map_inverse([p_com])
+
+        # pack all together and get full weight
+        r = torch.concat([r_lumi, r_rambo], dim=1)
+        inv_ps_weight = w_rambo_inv * det_lumi_inv
+
+        return (r, m_out), inv_ps_weight
+
+    def density(self, inputs, condition=None, inverse=False):
+        del condition
+        if inverse:
+            _, gs_inv = self.map_inverse(self, inputs)
+            return gs_inv
+
+        _, gs = self.map(self, inputs)
+        return gs
+
+
+class AutoregressiveMahamboBlock(PhaseSpaceMapping):
+    """
+    (Massive) RamboOnDiet including luminosity sampling
+    for hadron colliders with trainable autorgressive blocks.
+
+    We allow for external masses as input parameter to combine this
+    as global t-channel Block with additional s-channel decays.
+    """
+
+    def __init__(
+        self,
+        e_beam: float,
+        nparticles: int,
+        e_hat_min: float,
+        bins: int = 3,
+        lumi_func: str = "non-resonant",
+        lumi_mass: Tensor = None,
+        lumi_width: Tensor = None,
+    ):
+        self.e_beam = e_beam
+        self.nparticles = nparticles
+
+        dims_in = [(3 * nparticles - 2,)]
+        dims_out = [(nparticles, 4), (2,)]
+
+        self.s_lab = torch.tensor(4 * e_beam**2)
+        self.shat_min = torch.tensor(e_hat_min**2)
+        self.shat_max = self.s_lab
+
+        # Define luminosity and its correlations
+        #
+
+        if lumi_func == "non-resonant":
+            luminosity = Luminosity(self.s_lab, self.shat_min, self.shat_max)
+        elif lumi_func == "resonant":
+            luminosity = ResonantLuminosity(
+                self.s_lab, lumi_mass, lumi_width, self.shat_min, self.shat_max
+            )
+        else:
+            luminosity = FlatLuminosity(self.s_lab, self.shat_min, self.shat_max)
+
+        self.luminosity = SplineMapping(
+            mapping=luminosity,
+            flow_dims_c=[],
+            correlations="all",
+            bins=bins,
+        )
+
+        # Define Rambo part (2->n) block
+        # with autoregressive correlations
+        # and with overal s_hat/s condition
+        #
+
+        rambo = tRamboBlock(nparticles, check_emin=False)
+        # get periodic indices
+        periodic_indices = list(range(2 * self.nparticles - 3, 3 * self.nparticles - 4))
+        self.rambo = SplineMapping(
+            mapping=rambo,
+            flow_dims_c=[(1,)],
+            correlations="autoregressive",
+            periodic=periodic_indices,
+            bins=bins,
+        )
+
+        super().__init__(dims_in, dims_out)
+
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of tensors [r, m_out]
+                r: random numbers with shape=(b,3*n-2)
+                m_out: (virtual) masses of outgoing particles with shape=(b,n)
+
+        Returns:
+            p_lab (Tensor): external momenta (lab frame) with shape=(b,n+2,4)
+            x1x2 (Tensor): pdf fractions with shape=(b,2)
+            det (Tensor): det of mapping with shape=(b,)
+        """
+        del condition
+        r = inputs[0]  # has dims (b,3*n-2)
+        m_out = inputs[1]  # has dims (b,n)
+        r_lumi, r_rambo = r[:, :2], r[:, 2:]
+
+        # Get x1 and x2
+        (x1x2,), lumi_det = self.luminosity.map([r_lumi])
+
+        # Get rambo momenta
+        e_cm = sqrt(x1x2.prod(dim=1) * self.s_lab)
+        sq_tau = sqrt(x1x2.prod(dim=1, keepdim=True))
+        (p_com,), w_rambo = self.rambo.map([r_rambo, e_cm, m_out], condition=[sq_tau])
 
         # Get output momenta an full ps-weight
         rap = 0.5 * log(x1x2[:, 0] / x1x2[:, 1])[:, None]  # needs shape (b,1)
