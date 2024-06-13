@@ -2,7 +2,7 @@
 
 import torch
 from torch import Tensor, sqrt, log, cos, sin, sqrt
-from .kinematics import kaellen, pi
+from .kinematics import kaellen, pi, lsquare
 
 
 def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
@@ -66,6 +66,29 @@ def build_p_in(e_cm: Tensor) -> Tensor:
     p2 = torch.stack([p_cms, zeros, zeros, -p_cms], dim=1)
     p_in = torch.stack([p1, p2], dim=1)
     return p_in
+
+
+def pin_to_x1x2(p_in: Tensor) -> Tensor:
+    """Calculates the pdf fractions x1, x2 from the initial state
+    momenta in their lab frame
+
+    Args:
+        p_in (Tensor): initial state momenta in lab frame with shape=(b,2,4)
+
+    Returns:
+        x1x2 (Tensor): pdf fractions with shape=(b,2)
+    """
+    pp = p_in[:, 0, 0] * 2
+    pm = p_in[:, 1, 0] * 2
+    e_cm = sqrt(lsquare(p_in[:, 0] + p_in[:, 1]))
+
+    # Get the bjorken variables
+    x1 = pp / e_cm
+    x2 = pm / e_cm
+
+    x1x2 = torch.stack([x1, x2], dim=1)
+    return x1x2
+
 
 def map_fourvector_rambo(r: Tensor) -> Tensor:
     """Transform unit hypercube points into into four-vectors.

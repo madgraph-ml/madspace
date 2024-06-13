@@ -28,7 +28,6 @@ from .invariants import (
     MasslessInvariantBlock,
     StableInvariantBlock,
 )
-from icecream import ic
 
 
 class TwoParticleCOM(PhaseSpaceMapping):
@@ -36,6 +35,9 @@ class TwoParticleCOM(PhaseSpaceMapping):
     Implement isotropic 2-particle phase-space, based on the mapping described in
         [2] https://arxiv.org/abs/hep-ph/0008033
         [3] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the COM-frame and thus only requires the COM energy
+    and the masses (or virtual ones) to construct the final decay momenta.
     """
 
     def __init__(self):
@@ -61,8 +63,10 @@ class TwoParticleCOM(PhaseSpaceMapping):
         r, s, m_out = inputs[0], inputs[1], inputs[2]
         p1 = torch.zeros(r.shape[0], 4, device=r.device)
         p2 = torch.zeros(r.shape[0], 4, device=r.device)
-        if torch.any(s < 0):
-            raise ValueError(f"s needs to be always positive")
+
+        # with torch.no_grad():
+        #    if torch.any(s < 0):
+        #        raise ValueError(f"s needs to be always positive")
 
         r1, r2 = r[:, 0], r[:, 1]
 
@@ -154,6 +158,9 @@ class TwoParticleLAB(PhaseSpaceMapping):
     Implement isotropic 2-particle phase-space, based on the mapping described in
         [2] https://arxiv.org/abs/hep-ph/0008033
         [3] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the LAB-frame and thus requires the input momentum
+    in the lab frame.
     """
 
     def __init__(self):
