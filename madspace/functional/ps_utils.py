@@ -68,19 +68,19 @@ def build_p_in(e_cm: Tensor) -> Tensor:
     return p_in
 
 
-def pin_to_x1x2(p_in: Tensor) -> Tensor:
+def pin_to_x1x2(p_in: Tensor, e_cm: Tensor) -> Tensor:
     """Calculates the pdf fractions x1, x2 from the initial state
     momenta in their lab frame
 
     Args:
         p_in (Tensor): initial state momenta in lab frame with shape=(b,2,4)
+        e_cm (Tensor): center of mass energy with shape=(b,)
 
     Returns:
         x1x2 (Tensor): pdf fractions with shape=(b,2)
     """
     pp = p_in[:, 0, 0] * 2
     pm = p_in[:, 1, 0] * 2
-    e_cm = sqrt(lsquare(p_in[:, 0] + p_in[:, 1]))
 
     # Get the bjorken variables
     x1 = pp / e_cm
