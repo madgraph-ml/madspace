@@ -167,13 +167,13 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
-        r_phi = phi / 2 / pi
+        r_phi = phi / (2 * pi) + (phi < 0)
         r_theta = (costheta + 1) / 2
 
         # Get last angle
         p2 = inv_rotate_zy(p2, phi, costheta)
         beta = atan2(p2[:, 2], p2[:, 1])
-        r_beta = beta / 2 / pi
+        r_beta = beta / (2 * pi) + (beta < 0)
         det_omega_inv = 1 / (8 * pi**2)
 
         # Pack all together and get full density
@@ -306,12 +306,12 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         p_lab = inputs[0]
 
         # Decaying particle in lab-frame
-        p0 = p_lab.sum(dim=1, keepdim=True)
+        p0 = p_lab.sum(dim=1)
         s = lsquare(p0)
         m_out = mass(p_lab)
 
         # boost into COM-frame
-        p_decay = boost(p_lab, p0, inverse=True)
+        p_decay = boost(p_lab, p0[:, None], inverse=True)
 
         # particle features
         p1 = p_decay[:, 0]
@@ -345,13 +345,13 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
-        r_phi = phi / 2 / pi
+        r_phi = phi / (2 * pi) + (phi < 0)
         r_theta = (costheta + 1) / 2
 
         # Get last angle
         p2 = inv_rotate_zy(p2, phi, costheta)
         beta = atan2(p2[:, 2], p2[:, 1])
-        r_beta = beta / 2 / pi
+        r_beta = beta / (2 * pi) + (beta < 0)
         det_omega_inv = 1 / (8 * pi**2)
 
         # Pack all together and get full density
