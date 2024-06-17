@@ -1,4 +1,5 @@
-from .ir import IRType, IRVariable
+from .ir import IRFunction, IRType, IRVariable, scalar
+
 
 VarList = list[IRVariable]
 MapReturn = tuple[VarList, IRVariable]
@@ -8,7 +9,7 @@ class PhaseSpaceMapping:
     def map(self, ir: IRFunction, inputs: VarList, condition: VarList = []) -> MapReturn:
         self._check_types(inputs, self.types_in, "input")
         self._check_types(condition, self.types_c, "condition")
-        outputs, det = self._map(inputs, condition)
+        outputs, det = self._map(ir, inputs, condition)
         self._check_types(outputs, self.types_out, "output")
         self._check_types([det], [scalar])
         return outputs, det
@@ -18,7 +19,7 @@ class PhaseSpaceMapping:
     ) -> MapReturn:
         self._check_types(inputs, self.types_in, "input")
         self._check_types(condition, self.types_c, "condition")
-        outputs, det = self._map_inverse(inputs, condition)
+        outputs, det = self._map_inverse(ir, inputs, condition)
         self._check_types(outputs, self.types_out, "output")
         self._check_types([det], [scalar])
         return outputs, det
@@ -34,13 +35,13 @@ class PhaseSpaceMapping:
         )
 
     def _check_types(
-        self, types: list[IRType], expected_types: list[IRType], name: str | None
+        self, variables: VarList, expected_types: list[IRType], name: str | None = None
     ):
-        if len(types) != len(expected_types):
+        if len(variables) != len(expected_types):
             raise ValueError(
-                f"wrong number of {name}s: expected {len(expected_types)}, got {len(types)}"
+                f"wrong number of {name}s: expected {len(expected_types)}, got {len(variables)}"
             )
-        for i, (type_given, type_expected) in enumerate(zip(types, expected_types)):
-            if type_given != type_expected:
-                error = f"expected {type_expected}, got {type_given}"
+        for i, (var, type_expected) in enumerate(zip(variables, expected_types)):
+            if var.type != type_expected:
+                error = f"expected {type_expected}, got {var.type}"
                 raise ValueError(error if name is None else f"{name} {i}: {error}")

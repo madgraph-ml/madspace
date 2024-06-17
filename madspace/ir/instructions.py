@@ -1,2 +1,0 @@
-from .ir import IRInstruction
-

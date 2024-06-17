@@ -2,20 +2,30 @@ import torch
 from torch import Tensor
 from math import pi
 
-import .functional.kinematics as kin
-import .functional.ps_utils as ps
-import .functional.tchannel as tc
-import .functional.propagators as prop
+from .functional import kinematics as kin
+from .functional import ps_utils as ps
+from .functional import tchannel as tc
+from .functional import propagators as prop
+
+def constant(c: float) -> Tensor:
+    return torch.tensor([c])
 
 ###################################################
 # Random numbers
 ###################################################
 
-def unit_to_phi(r: Tensor) -> Tensor:
-    return 2 * r * pi - pi
+def uniform(r: Tensor, x_min: float, x_max: float) -> Tensor:
+    return x_min + (x_max - x_min) * r
 
-def unit_to_costheta(r: Tensor) -> Tensor:
-    return 2 * r - 1
+def uniform_inverse(x: Tensor) -> Tensor:
+    return (x - x_min) / (x_max - x_min)
+
+###################################################
+# Math
+###################################################
+
+def mul(a: Tensor, b: Tensor) -> Tensor:
+    return a * b
 
 ###################################################
 # Kinematics
@@ -53,6 +63,20 @@ def add_4vec(p1: Tensor, p2: Tensor) -> Tensor:
 
 def sub_4vec(p1: Tensor, p2: Tensor) -> Tensor:
     return p1 - p2
+
+def r_to_x1x2(r: Tensor, shat: Tensor, s_lab: float) -> tuple[Tensor, Tensor, Tensor]:
+    tau = shat / s_lab
+    x1 = tau ** r
+    x2 = tau ** (1 - r)
+    det = tau.log().abs() / s_lab
+    return x1, x2, det
+
+def x1x2_to_r(x1: Tensor, x2: Tensor, s_lab: float) -> tuple[Tensor, Tensor]:
+    tau = x1 * x2
+    log_tau = x1 * x2
+    r = x1.log() / tau.log()
+    det = torch.abs(1 / log(tau)) * s_lab
+    return r, det
 
 ###################################################
 # Two-body decays
