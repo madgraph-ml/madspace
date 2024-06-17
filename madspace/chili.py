@@ -28,7 +28,7 @@ class tChiliBlock(PhaseSpaceMapping):
         Args:
             nparticles (int): Number of outgoing particles
             ymax (Tensor): integration limits for rapidities with shape=(b,n)
-            ptmin (Tensor): integration limits for pt with shape=(b,n-1)
+            ptmin (Tensor): integration limits for pt with shape=(b,n)
         """
         self.nout = nparticles
         self.ymax = ymax
