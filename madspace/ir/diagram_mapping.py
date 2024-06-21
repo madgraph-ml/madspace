@@ -133,45 +133,72 @@ class Diagram:
                     continue
                 self.lines_after_t.append(line)
 
+    def _permutation_recursive(self, lines: list[Line], vertices: list[Vertex]):
+        out_indices = []
+        for line, parent_vertex in zip(lines, vertices):
+            if len(line.vertices) == 1:
+                out_indices.append(self.outgoing.index(line))
+            else:
+                vertex = line.vertices[1 if line.vertices[0] is parent_vertex else 0]
+                next_lines = [
+                    next_line for next_line in vertex.lines if next_line is not line
+                ]
+                next_vertices = [vertex] * len(next_lines)
+                out_indices.extend(self._permutation_recursive(next_lines, next_vertices))
+        return out_indices
+
     def _init_s_channel(self):
-        lines = self.lines_after_t
-        vertices = self.t_channel_vertices
+        self.inverse_permutation = self._permutation_recursive(
+            self.lines_after_t, self.t_channel_vertices
+        )
+        self.permutation = [
+            self.inverse_permutation.index(i) for i in range(len(self.outgoing))
+        ]
 
         self.s_channel_lines = []
         self.s_channel_vertices = []
         self.s_decay_layers = []
+        lines = [self.outgoing[i] for i in self.inverse_permutation]
+        vertices = [None] * len(lines)
         has_next_layer = True
         while has_next_layer:
-            next_lines = []
             next_vertices = []
-            layer = []
+            decay_counts = []
             has_next_layer = False
             for line, parent_vertex in zip(lines, vertices):
-                if line in self.outgoing:
-                    next_lines.append(line)
-                    next_vertices.append(parent_vertex)
-                    layer.append(1)
-                    continue
-                self.s_channel_lines.append(line)
                 vertex = line.vertices[1 if line.vertices[0] is parent_vertex else 0]
-                self.s_channel_vertices.append(vertex)
+                if vertex not in next_vertices:
+                    if vertex in self.t_channel_vertices:
+                        next_vertices.append(parent_vertex)
+                    else:
+                        next_vertices.append(vertex)
+                        has_next_layer = True
+                    decay_counts.append(0)
+                decay_counts[-1] += 1
+            self.s_decay_layers.append(decay_counts)
 
-                decay_count = 0
-                for next_line in vertex.lines:
-                    if next_line is line:
-                        continue
+            line_iter = iter(lines)
+            vertex_iter = iter(vertices)
+            next_lines = []
+            for i, (decay_count, vertex) in enumerate(zip(decay_counts, next_vertices)):
+                if decay_count == 1:
+                    next_vertices[i] = next(vertex_iter)
+                    next_lines.append(next(line_iter))
+                else:
+                    for _ in range(decay_count):
+                        next(vertex_iter)
+                    decayed_lines = [next(line_iter) for _ in range(decay_count)]
+                    next_line = next(
+                        line for line in vertex.lines if line not in decayed_lines
+                    )
                     next_lines.append(next_line)
-                    has_next_layer = True
-                    next_vertices.append(vertex)
-                    decay_count += 1
-                layer.append(decay_count)
+                    self.s_channel_lines.append(next_line)
+                    self.s_channel_vertices.append(vertex)
+
             lines = next_lines
             vertices = next_vertices
-            self.s_decay_layers.append(layer)
-        del self.s_decay_layers[-1]
 
-        self.permutation = [lines.index(line) for line in self.outgoing]
-        self.inverse_permutation = [self.outgoing.index(line) for line in lines]
+        del self.s_decay_layers[-1]
 
 
 class RandomNumbers:
@@ -192,8 +219,8 @@ def ir_sum(ir: IRFunction, terms: list[IRVariable]) -> IRVariable:
     if len(terms) == 0:
         return ir.constant(0.)
     tsum = terms[0]
-    for factor in terms[1:]:
-        prod = ir.add(tsum, factor)
+    for term in terms[1:]:
+        tsum = ir.add(tsum, term)
     return tsum
 
 
@@ -226,20 +253,22 @@ class tDiagramMapping(PhaseSpaceMapping):
 
         last_t_line = diagram.t_channel_lines[-1]
         self.t_invariants = [
-            tInvariantTwoParticleCOM(nu=1.4)
-            if last_t_line.mass == 0.0
-            else tInvariantTwoParticleCOM(
-                mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
-            )
+            tInvariantTwoParticleCOM(flat=True)
+            #tInvariantTwoParticleCOM(nu=1.4)
+            #if last_t_line.mass == 0.0
+            #else tInvariantTwoParticleCOM(
+            #    mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
+            #)
         ]
         self.s_uniform_invariants = []
         for line in reversed(diagram.t_channel_lines[:-1]):
             self.t_invariants.append(
-                tInvariantTwoParticleLAB(nu=1.4)
-                if line.mass == 0.0
-                else tInvariantTwoParticleLAB(
-                    mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
-                )
+                tInvariantTwoParticleLAB(flat=True)
+                #tInvariantTwoParticleLAB(nu=1.4)
+                #if line.mass == 0.0
+                #else tInvariantTwoParticleLAB(
+                #    mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
+                #)
             )
             self.s_uniform_invariants.append(UniformInvariantBlock())
 
@@ -309,7 +338,7 @@ class DiagramMapping(PhaseSpaceMapping):
         self.sqrt_s_epsilon = s_min_epsilon**0.5
 
         epsilons = [0.0] * len(diagram.outgoing)
-        for layer in reversed(diagram.s_decay_layers):
+        for layer in diagram.s_decay_layers:
             eps_iter = iter(epsilons)
             epsilons = []
             for count in layer:
@@ -348,7 +377,7 @@ class DiagramMapping(PhaseSpaceMapping):
             else:
                 raise ValueError(f"Unknown t-channel mapping {t_mapping}")
         elif not leptonic:
-            s_line = diagram.s_channel_lines[0]
+            s_line = diagram.s_channel_lines[-1]
             if s_line.mass != 0.0:
                 self.luminosity = ResonantLuminosity(
                     s_lab, s_line.mass, s_line.width, s_hat_min
@@ -360,18 +389,16 @@ class DiagramMapping(PhaseSpaceMapping):
         self.s_decay_invariants = []
         self.s_decays = []
         line_iter = iter(diagram.s_channel_lines)
-        is_com_decay = not self.has_t_channel
-        for layer in diagram.s_decay_layers:
+        s_decay_layers = (
+            diagram.s_decay_layers if self.has_t_channel else diagram.s_decay_layers[:-1]
+        )
+        for layer in s_decay_layers:
             layer_invariants = []
             layer_decays = []
             for count in layer:
                 if count == 1:
                     continue
                 line = next(line_iter)
-                if is_com_decay:
-                    layer_decays.append(TwoParticleCOM())
-                    is_com_decay = False
-                    continue
                 layer_invariants.append(
                     MasslessInvariantBlock(nu=1.4)
                     if line.mass == 0.0
@@ -384,6 +411,9 @@ class DiagramMapping(PhaseSpaceMapping):
                 layer_decays.append(TwoParticleLAB())
             self.s_decay_invariants.append(layer_invariants)
             self.s_decays.append(layer_decays)
+        if not self.has_t_channel:
+            self.s_decay_invariants.append([])
+            self.s_decays.append([TwoParticleCOM()])
 
         self.pi_factors = (2 * pi) ** (4 - 3 * n_out)
 
@@ -397,7 +427,6 @@ class DiagramMapping(PhaseSpaceMapping):
         else:
             (x1, x2, s_hat), jac_lumi = self.luminosity.map(ir, rand(2))
             dets.append(jac_lumi)
-            #rap = 0.5 * torch.log(x1x2[:, 0] / x1x2[:, 1])[:, None]
             rap = ir.rapidity(x1, x2)
         sqrt_s_hat = ir.sqrt(s_hat)
 
@@ -406,7 +435,7 @@ class DiagramMapping(PhaseSpaceMapping):
         decay_masses = []
         decay_s_sqrt_s = []
         for layer_counts, layer_invariants in zip(
-            reversed(self.diagram.s_decay_layers), reversed(self.s_decay_invariants)
+            self.diagram.s_decay_layers, self.s_decay_invariants
         ):
             sqrt_s_min = []
             sqrt_s_index = 0
@@ -442,15 +471,15 @@ class DiagramMapping(PhaseSpaceMapping):
                     layer_s_sqrt_s.append((None, None))
                     continue
                 s_min = ir.square(sqrt_s_min[i])
-                if i == 0:
+                if i == len(layer_counts) - 1:
                     s_max = ir.square(sqs_sum)
                 else:
-                    s_max = ir.square(ir.sub(sqs_sum, sqs_min_sums[-i]))
+                    s_max = ir.square(ir.sub(sqs_sum, sqs_min_sums[-i - 1]))
                 (s,), jac = next(invariant_iter).map(ir, rand(), condition=[s_min, s_max])
                 sqs = ir.sqrt(s)
                 sqrt_s.append(sqs)
                 layer_s_sqrt_s.append((s, sqs))
-                sqs_sum = ir.add(sqs_sum, sqs)
+                sqs_sum = ir.sub(sqs_sum, sqs)
                 dets.append(jac)
             decay_s_sqrt_s.append(layer_s_sqrt_s)
 
@@ -470,10 +499,10 @@ class DiagramMapping(PhaseSpaceMapping):
 
         # build the momenta of the decays
         for layer_counts, layer_decays, layer_masses, layer_s_sqrt_s in zip(
-            self.diagram.s_decay_layers,
-            self.s_decays,
+            reversed(self.diagram.s_decay_layers),
+            reversed(self.s_decays),
             reversed(decay_masses),
-            reversed(decay_s_sqrt_s)
+            reversed(decay_s_sqrt_s),
         ):
             p_out_prev = p_out
             p_out = []

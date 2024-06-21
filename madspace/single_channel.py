@@ -81,8 +81,8 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Define mappings
         self.luminosity = Luminosity(s_lab, self.s_hat_min)  # 2dof
-        self.t1 = tInvariantTwoParticleCOM(nu=1.4)  # 2dof
-        self.s12 = UniformInvariantBlock() #BreitWignerInvariantBlock(mz, wz)  # 1 dof
+        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2dof
+        self.s12 = MasslessInvariantBlock() #BreitWignerInvariantBlock(mz, wz)  # 1 dof
         self.decay = TwoParticleLAB()  # 2 dof
 
         # Get correct factors of pi
@@ -269,9 +269,9 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Define mappings
         self.luminosity = Luminosity(s_lab, s_hat_min)  # 2dof
-        self.t1 = tInvariantTwoParticleCOM(nu=1.4)  # 2dof
-        self.t2 = tInvariantTwoParticleLAB(nu=1.4)  # 2dof
-        self.t3 = tInvariantTwoParticleLAB(nu=1.4)  # 2dof
+        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2dof
+        self.t2 = tInvariantTwoParticleLAB(flat=True)  # 2dof
+        self.t3 = tInvariantTwoParticleLAB(flat=True)  # 2dof
 
         self.s12 = UniformInvariantBlock()  # 1 dof
         self.s123 = UniformInvariantBlock()  # 1 dof
@@ -713,8 +713,8 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         else:
             self.s234 = MasslessInvariantBlock()  # 1 dof
         self.s1234 = UniformInvariantBlock()  # 1 dof
-        self.t1 = tInvariantTwoParticleCOM(mw, ww)  # 2 dof
-        self.t2 = tInvariantTwoParticleLAB(mw, ww)  # 2 dof
+        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2 dof
+        self.t2 = tInvariantTwoParticleLAB(flat=True)  # 2 dof
         self.d23 = TwoParticleLAB()  # 2 dof
         self.d234 = TwoParticleLAB()  # 2 dof
 
