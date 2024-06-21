@@ -269,7 +269,7 @@ def mass(a: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(lsquare(a))
+    return sqrt(torch.clip(lsquare(a), min=0.))
 
 
 def lsquare(a: Tensor) -> Tensor:
@@ -283,6 +283,7 @@ def lsquare(a: Tensor) -> Tensor:
         Tensor: Lorentzscalar with shape=(b,...)
     """
     s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    #return s
     #return torch.clamp_min_(s, EPS)
     return torch.where(s.abs() < EPS, 0., s)
 
