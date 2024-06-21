@@ -503,8 +503,10 @@ class DiagramMapping(PhaseSpaceMapping):
 
         # sample s-invariants from decays, starting from the final state particles
         sqrt_s = [
-            torch.full_like(sqrt_s_hat, line.mass)[:, None]
-            for line in self.diagram.outgoing
+            torch.full_like(
+                sqrt_s_hat, self.diagram.outgoing[self.diagram.inverse_permutation[i]].mass
+            )[:, None]
+            for i in range(len(self.diagram.outgoing))
         ]
         decay_masses = []
         for layer_counts, layer_invariants in zip(

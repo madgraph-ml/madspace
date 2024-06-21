@@ -426,7 +426,9 @@ class DiagramMapping(PhaseSpaceMapping):
         sqrt_s_hat = ir.sqrt(s_hat)
 
         # sample s-invariants from decays, starting from the final state particles
-        sqrt_s = [ir.constant(line.mass) for line in self.diagram.outgoing]
+        sqrt_s = [ir.constant(
+            self.diagram.outgoing[self.diagram.inverse_permutation[i]].mass
+        ) for i in range(len(self.diagram.outgoing))]
         decay_masses = []
         decay_s_sqrt_s = []
         for layer_counts, layer_invariants in zip(
