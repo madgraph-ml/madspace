@@ -336,23 +336,48 @@ class DiagramMapping(PhaseSpaceMapping):
         self.diagram = diagram
         self.s_lab = s_lab
         self.sqrt_s_epsilon = s_min_epsilon**0.5
+        self.has_t_channel = len(diagram.t_channel_lines) != 0
 
-        epsilons = [0.0] * len(diagram.outgoing)
-        for layer in diagram.s_decay_layers:
-            eps_iter = iter(epsilons)
-            epsilons = []
-            for count in layer:
-                epsilons.append(
-                    max(self.sqrt_s_epsilon, sum(next(eps_iter) for i in range(count)))
-                )
-        s_min_decay = sum(epsilons) ** 2
-
-        s_hat_min = max(
-            sum(line.mass for line in diagram.outgoing) ** 2, s_min_decay, s_hat_min
+        # Initialize s invariants and decay mappings
+        sqrt_s_min = [
+            diagram.outgoing[diagram.inverse_permutation[i]].mass
+            for i in range(len(diagram.outgoing))
+        ]
+        self.s_decay_invariants = []
+        self.s_decays = []
+        line_iter = iter(diagram.s_channel_lines)
+        s_decay_layers = (
+            diagram.s_decay_layers if self.has_t_channel else diagram.s_decay_layers[:-1]
         )
+        for layer in s_decay_layers:
+            sqs_iter = iter(sqrt_s_min)
+            sqrt_s_min = []
+            layer_invariants = []
+            layer_decays = []
+            for count in layer:
+                sqs_min = max(self.sqrt_s_epsilon, sum(next(sqs_iter) for i in range(count)))
+                sqrt_s_min.append(sqs_min)
+                if count == 1:
+                    continue
+                line = next(line_iter)
+                layer_invariants.append(
+                    MasslessInvariantBlock(nu=1.4)
+                    if line.mass == 0.0
+                    else (
+                        StableInvariantBlock(mass=line.mass, nu=1.4)
+                        if line.width == 0.0
+                        else BreitWignerInvariantBlock(mass=line.mass, width=line.width)
+                    )
+                )
+                layer_decays.append(TwoParticleLAB())
+            self.s_decay_invariants.append(layer_invariants)
+            self.s_decays.append(layer_decays)
+        if not self.has_t_channel:
+            self.s_decay_invariants.append([])
+            self.s_decays.append([TwoParticleCOM()])
 
         # Initialize luminosity and t-channel mapping
-        self.has_t_channel = len(diagram.t_channel_lines) != 0
+        s_hat_min = max(sum(sqrt_s_min) ** 2, s_hat_min)
         self.luminosity = None
         if self.has_t_channel:
             self.t_channel_type = t_mapping
@@ -384,36 +409,6 @@ class DiagramMapping(PhaseSpaceMapping):
                 )
             else:
                 self.luminosity = Luminosity(s_lab, s_hat_min)
-
-        # Initialize s invariants and decay mappings
-        self.s_decay_invariants = []
-        self.s_decays = []
-        line_iter = iter(diagram.s_channel_lines)
-        s_decay_layers = (
-            diagram.s_decay_layers if self.has_t_channel else diagram.s_decay_layers[:-1]
-        )
-        for layer in s_decay_layers:
-            layer_invariants = []
-            layer_decays = []
-            for count in layer:
-                if count == 1:
-                    continue
-                line = next(line_iter)
-                layer_invariants.append(
-                    MasslessInvariantBlock(nu=1.4)
-                    if line.mass == 0.0
-                    else (
-                        StableInvariantBlock(mass=line.mass, nu=1.4)
-                        if line.width == 0.0
-                        else BreitWignerInvariantBlock(mass=line.mass, width=line.width)
-                    )
-                )
-                layer_decays.append(TwoParticleLAB())
-            self.s_decay_invariants.append(layer_invariants)
-            self.s_decays.append(layer_decays)
-        if not self.has_t_channel:
-            self.s_decay_invariants.append([])
-            self.s_decays.append([TwoParticleCOM()])
 
         self.pi_factors = (2 * pi) ** (4 - 3 * n_out)
 
