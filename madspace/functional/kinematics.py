@@ -129,6 +129,22 @@ def rapidity(p: Tensor) -> Tensor:
     return torch.where(Es < EPS, 99.0, y)
 
 
+def eta(p: Tensor) -> Tensor:
+    """Gives the pseudo-rapidity (eta) of a particle
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    Ps = sqrt(esquare(vec3(p)))
+    Pz = p[..., 3]
+
+    eta = 0.5 * log((Ps + Pz) / (Ps - Pz))
+    return torch.where(Ps < EPS, 99.0, eta)
+
+
 def phi(p: Tensor) -> Tensor:
     """Gives the azimuthal phi of a particle
 
@@ -193,6 +209,20 @@ def delta_rap(p: Tensor, q: Tensor) -> Tensor:
     return torch.abs(dy)
 
 
+def delta_eta(p: Tensor, q: Tensor) -> Tensor:
+    """Gives Delta-eta between two (sets) of 4-momenta p and q
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+        q (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: delta_y with shape=(b,...)
+    """
+    deta = eta(p) - eta(q)
+    return torch.abs(deta)
+
+
 def delta_phi(p: Tensor, q: Tensor) -> Tensor:
     """Gives Delta-rapidity between two (sets) of 4-momenta p and q
 
@@ -218,7 +248,7 @@ def deltaR(p: Tensor, q: Tensor) -> Tensor:
     Returns:
         Tensor: 3-momentum with shape=(b,...,3)
     """
-    dy = delta_rap(p, q)
+    dy = delta_eta(p, q)
     dphi = delta_phi(p, q)
     return sqrt(dy**2 + dphi**2)
 
@@ -248,6 +278,32 @@ def pmag(p: Tensor) -> Tensor:
     return sqrt(pmag2(p))
 
 
+def sqrt_shat(p: Tensor) -> Tensor:
+    """Gives the center-of-mass energy
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    psum = p.sum(dim=1)
+    return mass(psum)
+
+
+def shat(p: Tensor) -> Tensor:
+    """Gives the squared center-of-mass energy
+
+    Args:
+        p (Tensor): momentum 4-vector with shape shape=(b,...,4)
+
+    Returns:
+        Tensor: mass with shape=(b,...)
+    """
+    psum = p.sum(dim=1)
+    return lsquare(psum)
+
+
 def costheta(p: Tensor) -> Tensor:
     """Gives the costheta angle of a particle
 
@@ -260,6 +316,20 @@ def costheta(p: Tensor) -> Tensor:
     return p[..., 3] / pmag(p)
 
 
+def minv(p1: Tensor, p2: Tensor) -> Tensor:
+    """Gives invariant mass of two momenta
+
+    Args:
+        p1 (Tensor): momentum 4-vector with shape shape=(b,4)
+        p2 (Tensor): momentum 4-vector with shape shape=(b,4)
+
+    Returns:
+        Tensor: minv shape=(b,)
+    """
+    p1p2 = p1 + p2
+    return mass(p1p2)
+
+
 def mass(a: Tensor) -> Tensor:
     """Gives the mass of a particle
 
@@ -269,7 +339,7 @@ def mass(a: Tensor) -> Tensor:
     Returns:
         Tensor: mass with shape=(b,...)
     """
-    return sqrt(torch.clip(lsquare(a), min=0.))
+    return sqrt(torch.clip(lsquare(a), min=0.0))
 
 
 def lsquare(a: Tensor) -> Tensor:
