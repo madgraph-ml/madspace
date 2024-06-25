@@ -282,7 +282,9 @@ def lsquare(a: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    #s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
+    a2 = a.square()
+    s = a2[..., 0] - a2[..., 1] - a2[..., 2] - a2[..., 3]
     #return s
     #return torch.clamp_min_(s, EPS)
     return torch.where(s.abs() < EPS, 0., s)
@@ -299,7 +301,9 @@ def ldot(a: Tensor, b: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, b)
+    ab = a * b
+    return ab[..., 0] - ab[..., 1] - ab[..., 2] - ab[..., 3]
+    #return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, b)
 
 
 def esquare(a: Tensor) -> Tensor:

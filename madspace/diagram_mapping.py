@@ -71,7 +71,7 @@ class Vertex:
         return str(self)
 
     def __str__(self):
-        return "?" if self.name is None else self.name
+        return str(self.lines) if self.name is None else self.name
 
 
 @dataclass
@@ -402,8 +402,8 @@ class DiagramMapping(PhaseSpaceMapping):
         s_min_epsilon: float = 1e-2,
     ):
         n_out = len(diagram.outgoing)
-        dims_in = [(3 * n_out - 2 - (0 if leptonic else 2),)]
-        dims_out = [(n_out, 4), (2,)]
+        dims_in = [(3 * n_out - 2 - (2 if leptonic else 0),)]
+        dims_out = [(n_out + 2, 4), (2,)]
         super().__init__(dims_in, dims_out)
 
         self.diagram = diagram
@@ -483,6 +483,8 @@ class DiagramMapping(PhaseSpaceMapping):
             else:
                 self.luminosity = Luminosity(s_lab, s_hat_min)
 
+        self.permutation = self.diagram.permutation
+        self.inverse_permutation = self.diagram.inverse_permutation
         self.pi_factors = (2 * pi) ** (4 - 3 * n_out)
 
     def map(self, inputs: TensorList, condition=None):
@@ -504,7 +506,7 @@ class DiagramMapping(PhaseSpaceMapping):
         # sample s-invariants from decays, starting from the final state particles
         sqrt_s = [
             torch.full_like(
-                sqrt_s_hat, self.diagram.outgoing[self.diagram.inverse_permutation[i]].mass
+                sqrt_s_hat, self.diagram.outgoing[self.inverse_permutation[i]].mass
             )[:, None]
             for i in range(len(self.diagram.outgoing))
         ]
@@ -580,7 +582,7 @@ class DiagramMapping(PhaseSpaceMapping):
         assert rand.empty()
 
         # permute and return momenta
-        p_ext = torch.cat([p_in, p_out[:, self.diagram.permutation]], dim=1)
+        p_ext = torch.cat([p_in, p_out[:, self.permutation]], dim=1)
         p_ext_lab = p_ext if self.luminosity is None else boost_beam(p_ext, rap)
         return (p_ext_lab, x1x2), ps_weight * self.pi_factors
 
@@ -599,7 +601,7 @@ class DiagramMapping(PhaseSpaceMapping):
         else:
             p_ext = boost_beam(p_ext_lab, rap, inverse=True)
         p_in = p_ext[:, :2]
-        p_out = p_ext[:, 2:][:, self.diagram.inverse_permutation]
+        p_out = p_ext[:, 2:][:, self.inverse_permutation]
 
         p_out = p_out.unbind(dim=1)[::-1]
         s_invariant_r = []
