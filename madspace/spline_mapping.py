@@ -270,3 +270,6 @@ class SplineMapping(PhaseSpaceMapping):
         else:
             x = x[:, self.inverse_permutation]
         return x, log_jac_all.exp()
+
+    def __deepcopy__(self, memo):
+        return self
