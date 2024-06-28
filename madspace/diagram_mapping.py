@@ -288,7 +288,7 @@ class tDiagramMapping(PhaseSpaceMapping):
         p1, p2 = p_in[:, 0], p_in[:, 1]
 
         # sample s-invariants from the t-channel part of the diagram
-        sqrt_s_max = e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1)
+        sqrt_s_max = e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1).flip([1])
         cumulated_m_out = [m_out[:, :1]]
         for invariant, sqs, sqs_max in zip(
             self.s_uniform_invariants,
@@ -352,7 +352,7 @@ class tDiagramMapping(PhaseSpaceMapping):
             [torch.zeros_like(p_out[:, :1]), p_out[:, 2:].flip([1])], dim=1
         ).cumsum(dim=1)
         ss = lsquare(cum_p)
-        s_maxs = (e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1)).square()
+        s_maxs = (e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1).flip([1])).square()
         s_mins = (ss[:, :-2].sqrt() + m_out[:, 1:-1]).square()
         p_t_ins = torch.stack(
             [
