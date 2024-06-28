@@ -1,4 +1,4 @@
-""" Implement propagator mappings.
+ ../madspace/functional/tchannel.py""" Implement propagator mappings.
 
     Based on the mappings described in
     [1] https://arxiv.org/abs/hep-ph/0206070v2
@@ -31,7 +31,12 @@ def costheta_to_invt(
     num1 = (s + m1**2 - m2**2) * (s + p1_2 - p2_2)
     num2 = sqrt(kaellen(s, m1**2, m2**2)) * sqrt(kaellen(s, p1_2, p2_2)) * costheta
     num = num1 - num2
-    t = m1**2 + p1_2 - num / (2 * s)
+    t = m1**2 + p1_2 - num / torch.clip(2 * s, min=EPS)
+    if t.isnan().any():
+        mask = t.isnan()
+        ic(s[mask], p1_2[mask], p2_2[mask], m1[mask], m2[mask], costheta[mask])
+        ic(num1[mask], num2[mask], num[mask], s[mask])
+        ic(kaellen(s, m1**2, m2**2)[mask], kaellen(s, p1_2, p2_2)[mask])
     return torch.clamp_max_(t, -EPS)
 
 
@@ -51,5 +56,10 @@ def invt_to_costheta(
     num2 = (s + m1**2 - m2**2) * (s + p1_2 - p2_2)
     num = num1 + num2
     denom = sqrt(kaellen(s, m1**2, m2**2)) * sqrt(kaellen(s, p1_2, p2_2))
-    costheta = num / denom
+    if (denom < 0).any():
+        print("SJDLKJHDFGVL:SDHFLKJHSDFLKJHSDFL")
+    costheta = num / torch.clip(denom, min=EPS)
+    if costheta.isnan().any():
+        mask = costheta.isnan()
+        ic(num1[mask], num2[mask], num[mask], denom[mask], costheta[mask])
     return torch.clamp_(costheta, -1.0, 1.0)

@@ -425,7 +425,7 @@ def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
 
     # Perform the boost
     # This is in fact a numerical more stable implementation then often used
-    rsq = mass(p_boost)
+    rsq = torch.clip(mass(p_boost), min=EPS)
     k0 = (k[..., 0] * p_boost[..., 0] + sign * edot(k[..., 1:], p_boost[..., 1:])) / rsq
     c1 = (k[..., 0] + k0) / (rsq + p_boost[..., 0])
     k1 = k[..., 1] + sign * c1 * p_boost[..., 1]

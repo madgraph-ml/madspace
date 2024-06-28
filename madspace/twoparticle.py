@@ -19,6 +19,7 @@ from .functional.kinematics import (
     lsquare,
     mass,
     pi,
+    EPS,
 )
 from .functional.ps_utils import two_particle_density, tinv_two_particle_density
 from .functional.tchannel import invt_to_costheta, costheta_to_invt
@@ -514,13 +515,14 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
 
         # Define the momenta (in COM frame of decaying particle)
-        k1[:, 0] = (s + m1**2 - m2**2) / (2 * sqrt(s))
-        k1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / (2 * sqrt(s))
+        s_inv = torch.clip(2 * sqrt(s), min=EPS)
+        k1[:, 0] = (s + m1**2 - m2**2) / s_inv
+        k1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / s_inv
 
         # Then rotate twice (within COM and into p1-axis)
         p1mag = pmag(p1_com)
         phi1 = atan2(p1_com[:, 2], p1_com[:, 1])
-        costheta1 = p1_com[:, 3] / p1mag
+        costheta1 = p1_com[:, 3] / torch.clip(p1mag, min=EPS)
         k1 = rotate_zy(k1, phi, costheta)
         k1 = rotate_zy(k1, phi1, costheta1)
         k1 = boost(k1, ptot)

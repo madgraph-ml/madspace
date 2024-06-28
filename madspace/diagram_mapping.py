@@ -298,6 +298,8 @@ class tDiagramMapping(PhaseSpaceMapping):
             s_min = (cumulated_m_out[-1] + sqs[:, None]) ** 2
             s_max = sqs_max[:, None] ** 2
             (s,), jac = invariant.map([rand()], condition=[s_min, s_max])
+            if s.isnan().any():
+                print("ALARM1!")
             cumulated_m_out.append(s.sqrt())
             det *= jac
 
@@ -305,11 +307,13 @@ class tDiagramMapping(PhaseSpaceMapping):
         p_out = []
         p_t_in = p_in
         p2_rest = p2
+        #cnt = len(self.t_invariants)
         for invariant, cum_m_out, mass in zip(
             self.t_invariants,
             reversed(cumulated_m_out),
             reversed(m_out[:, 1:].unbind(dim=1)),
         ):
+            #cnt -= 1
             m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
             r = rand(2)
             (ks,), jac = invariant.map([r, m_t], condition=[p_t_in])
