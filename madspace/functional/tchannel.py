@@ -1,4 +1,4 @@
- ../madspace/functional/tchannel.py""" Implement propagator mappings.
+""" Implement propagator mappings.
 
     Based on the mappings described in
     [1] https://arxiv.org/abs/hep-ph/0206070v2
