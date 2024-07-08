@@ -75,6 +75,7 @@ class RootFinderMass(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         dfdxi, dfdp = ctx.saved_tensors
+        # Formula: https://en.wikipedia.org/wiki/Implicit_function
         # dx/dp = (df/dx)^(-1) * (df/dp) * (-1)
         dxidp = -dfdp / dfdxi[:, None]
         return grad_output[:, None] * dxidp, None

@@ -1,7 +1,4 @@
-import torch
 from torch import Tensor
-from .methods import newton
-from typing import Mapping, Callable, Union, Dict, List
 from .autograd import RootFinderPolynomial, RootFinderMass
 
 
@@ -33,10 +30,4 @@ def get_xi_parameter(p0: Tensor, mass: Tensor) -> Tensor:
     Returns:
         xi (Tensor): scaling parameter with shape=(b,)
     """
-    e_cm = p0.sum(dim=1)
-    func = lambda x: func_mass(x, p0, mass, e_cm)
-    dxif = lambda x: dxifunc_mass(x, p0, mass)
-    guess = 0.5 * torch.ones((p0.shape[0],))
-    xi = newton(func, dxif, 0.0, 1.0, guess)
-    return xi
-    # return RootFinderMass.apply(p0, mass)
+    return RootFinderMass.apply(p0, mass)

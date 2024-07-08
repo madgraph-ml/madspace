@@ -72,5 +72,5 @@ def dxifunc_mass(xi: Tensor, p0: Tensor, m: Tensor) -> Tensor:
 def dpfunc_mass(xi: Tensor, p0: Tensor, m: Tensor) -> Tensor:
     """Gradient of func_mass with respect to all pi"""
     root = sqrt(xi[:, None] ** 2 * p0**2 + m**2)
-    df = xi[:, None] ** 2 * p0 / root
+    df = xi[:, None] ** 2 * p0 / root - 1.0
     return df
