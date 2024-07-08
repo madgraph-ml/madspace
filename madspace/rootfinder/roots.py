@@ -33,4 +33,10 @@ def get_xi_parameter(p0: Tensor, mass: Tensor) -> Tensor:
     Returns:
         xi (Tensor): scaling parameter with shape=(b,)
     """
-    return RootFinderMass.apply(p0, mass)
+    e_cm = p0.sum(dim=1)
+    func = lambda x: func_mass(x, p0, mass, e_cm)
+    dxif = lambda x: dxifunc_mass(x, p0, mass)
+    guess = 0.5 * torch.ones((p0.shape[0],))
+    xi = newton(func, dxif, 0.0, 1.0, guess)
+    return xi
+    # return RootFinderMass.apply(p0, mass)
