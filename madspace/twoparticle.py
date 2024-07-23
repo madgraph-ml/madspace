@@ -120,7 +120,7 @@ class TwoParticleCOM(PhaseSpaceMapping):
         p1mag = pmag(p1)
 
         # Extract phi and theta
-        costheta = p1[:, 3] / p1mag
+        costheta = p1[:, 3] / p1mag.clip(min=EPS)
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
@@ -245,7 +245,7 @@ class TwoParticleLAB(PhaseSpaceMapping):
         p1mag = pmag(p1)
 
         # Extract phi and theta
-        costheta = p1[:, 3] / p1mag
+        costheta = p1[:, 3] / p1mag.clip(min=EPS)
         phi = atan2(p1[:, 2], p1[:, 1])
 
         # Get the random numbers
@@ -363,7 +363,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         # Then rotate twice (within COM and into p1-axis)
         p1mag = pmag(p1)
         phi1 = atan2(p1[:, 2], p1[:, 1])
-        costheta1 = p1[:, 3] / p1mag
+        costheta1 = p1[:, 3] / p1mag.clip(min=EPS)
         k1 = rotate_zy(k1, phi, costheta)
         k1 = rotate_zy(k1, phi1, costheta1)
         k2 = ptot - k1
@@ -389,7 +389,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         # Get angles of incoming momenta
         p1mag = pmag(p1)
         phi1 = atan2(p1[:, 2], p1[:, 1])
-        costheta1 = p1[:, 3] / p1mag
+        costheta1 = p1[:, 3] / p1mag.clip(min=EPS)
 
         # Extraxt individual momenta
         k1 = p_out[:, 0]
@@ -404,7 +404,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         # and then extract phi and theta
         k1 = inv_rotate_zy(k1, phi1, costheta1)
         k1mag = pmag(k1)
-        costheta = k1[:, 3] / k1mag
+        costheta = k1[:, 3] / k1mag.clip(min=EPS)
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
@@ -550,7 +550,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         # Get angles of incoming momenta
         p1mag = pmag(p1_com)
         phi1 = atan2(p1_com[:, 2], p1_com[:, 1])
-        costheta1 = p1_com[:, 3] / p1mag
+        costheta1 = p1_com[:, 3] / p1mag.clip(min=EPS)
 
         # Get outgoing momenta
         k1 = p_out[:, 0]
@@ -566,7 +566,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         k1 = boost(k1, ptot, inverse=True)
         k1 = inv_rotate_zy(k1, phi1, costheta1)
         k1mag = pmag(k1)
-        costheta = k1[:, 3] / k1mag
+        costheta = k1[:, 3] / k1mag.clip(min=EPS)
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t

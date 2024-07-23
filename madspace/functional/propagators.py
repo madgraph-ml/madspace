@@ -13,6 +13,7 @@ from typing import Tuple
 import torch
 from torch import Tensor, log, atan, tan
 
+from .kinematics import EPS
 
 def uniform_propagator(
     r_or_s: Tensor,
@@ -26,7 +27,7 @@ def uniform_propagator(
 
     """
     # define density
-    gs = s_max - s_min
+    gs = (s_max - s_min).clip(min=EPS)
 
     if inverse:
         # s needs to be within [s_min, s_max]
