@@ -205,7 +205,7 @@ class Luminosity(_Luminosity):
 
 
 class ResonantLuminosity(_Luminosity):
-    """
+    r"""
     Implement luminosity mapping that takes into account resonant
     particles in the s-channel related to the partonic COM
     energy s_hat.
