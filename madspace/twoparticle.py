@@ -353,7 +353,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
         (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
 
-        # Map from t to cos_theta (needs -t as it samples |t|)
+        # Map from t to cos_theta (needs -t as it was sampled as |t|)
         costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
 
         # Define the momenta (in COM frame of decaying particle)

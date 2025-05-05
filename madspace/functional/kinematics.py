@@ -5,7 +5,6 @@ from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, atan2
 from math import pi
 
 
-MINKOWSKI = torch.diag(torch.tensor([1.0, -1.0, -1.0, -1.0]))
 DTYE = torch.get_default_dtype()
 EPS = 1e-12 if DTYE == torch.float64 else 1e-6
 
@@ -352,12 +351,9 @@ def lsquare(a: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    #s = torch.einsum("...d,dd,...d->...", a, MINKOWSKI, a)
     a2 = a.square()
     s = a2[..., 0] - a2[..., 1] - a2[..., 2] - a2[..., 3]
-    #return s
-    #return torch.clamp_min_(s, EPS)
-    return torch.where(s.abs() < EPS, 0., s)
+    return s
 
 
 def ldot(a: Tensor, b: Tensor) -> Tensor:
@@ -373,7 +369,6 @@ def ldot(a: Tensor, b: Tensor) -> Tensor:
     """
     ab = a * b
     return ab[..., 0] - ab[..., 1] - ab[..., 2] - ab[..., 3]
-    #return torch.einsum("...d,dd,...d->...", a, MINKOWSKI, b)
 
 
 def esquare(a: Tensor) -> Tensor:
@@ -386,7 +381,8 @@ def esquare(a: Tensor) -> Tensor:
     Returns:
         Tensor: Square with shape=(b,...)
     """
-    return torch.einsum("...d,...d->...", a, a)
+    a2 = a.square()
+    return a2[..., 0] + a2[..., 1] + a2[..., 2] + a2[..., 3]
 
 
 def edot(a: Tensor, b: Tensor) -> Tensor:
@@ -400,7 +396,8 @@ def edot(a: Tensor, b: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    return torch.einsum("...d,...d->...", a, b)
+    ab = a * b
+    return ab[..., 0] + ab[..., 1] + ab[..., 2] + ab[..., 3]
 
 
 def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:

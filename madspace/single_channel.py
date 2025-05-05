@@ -23,7 +23,6 @@ from .invariants import (
     UniformInvariantBlock,
     MasslessInvariantBlock,
 )
-from icecream import ic
 
 
 class SingleChannelWWW(PhaseSpaceMapping):

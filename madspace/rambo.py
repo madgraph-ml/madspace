@@ -8,7 +8,7 @@ from .rootfinder.roots import get_u_parameter, get_xi_parameter
 
 from .base import PhaseSpaceMapping, TensorList
 from .luminosity import Luminosity, FlatLuminosity, ResonantLuminosity
-from .functional.kinematics import boost, boost_beam, mass, esquare, lsquare
+from .functional.kinematics import boost, boost_beam, mass, esquare, sqrt_shat
 from .functional.ps_utils import (
     build_p_in,
     pin_to_x1x2,
@@ -87,7 +87,7 @@ class Rambo(PhaseSpaceMapping):
         Q = q.sum(dim=1, keepdim=True)  # has shape (b,1,4)
 
         # Get scaling factor and match dimensions
-        M = sqrt(lsquare(Q))  # has shape (b,1)
+        M = mass(Q)  # has shape (b,1)
         x = e_cm / M  # has shape (b,1)
 
         # Boost and refactor
@@ -320,7 +320,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         # Get input momenta
         p_ext = inputs[0]
         k = p_ext[:, 2:]
-        e_cm = sqrt(lsquare(k.sum(dim=1)))
+        e_cm = (k.sum(dim=1))
         w0 = self._massles_weight(e_cm)
 
         # Make momenta massless before going back to random numbers
@@ -345,7 +345,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         # Get random numbers associated to the intermediate masses
         # have shapees (b, n-1)
         P = torch.cumsum(p.flip(1), dim=1)[:, 1:]  # has shape (b, n-1)
-        M = sqrt(lsquare(P))
+        M = mass(P)
         # have shapes (b, n-2)
         um = (M[:, :-1] / M[:, 1:]).flip(1)
         iarray = torch.arange(2, self.nparticles, device=p.device)[None, :]
@@ -823,7 +823,7 @@ class tRamboBlock(PhaseSpaceMapping):
         del condition
         # Get input momenta
         p_in, k = inputs
-        e_cm = sqrt(lsquare(p_in.sum(dim=1)))
+        e_cm = sqrt_shat(p_in)
         m_out = mass(k)  # has shape (b,n)
         w0 = self._massles_weight(e_cm)
 
@@ -841,7 +841,7 @@ class tRamboBlock(PhaseSpaceMapping):
         # Get random numbers associated to the intermediate masses
         # have shapees (b, n-1)
         P = torch.cumsum(p.flip(1), dim=1)[:, 1:]  # has shape (b, n-1)
-        M = sqrt(lsquare(P))
+        M = mass(P)
         # have shapes (b, n-2)
         um = (M[:, :-1] / M[:, 1:]).flip(1)
         iarray = torch.arange(2, self.nparticles, device=p.device)[None, :]
@@ -1001,7 +1001,7 @@ class tMahamboBlock(PhaseSpaceMapping):
         del condition
         p_in_lab = inputs[0]
         p_out_lab = inputs[1]
-        sqrt_s = sqrt(lsquare(p_in_lab.sum(dim=1)))
+        sqrt_s = sqrt_shat(p_in_lab)
         x1x2 = pin_to_x1x2(p_in_lab, sqrt_s)
 
         # Get rapidities
@@ -1151,7 +1151,7 @@ class tAutoregressiveMahamboBlock(PhaseSpaceMapping):
         del condition
         p_in_lab = inputs[0]
         p_out_lab = inputs[1]
-        sqrt_s = sqrt(lsquare(p_in_lab.sum(dim=1)))
+        sqrt_s = sqrt_shat(p_in_lab)
         x1x2 = pin_to_x1x2(p_in_lab, sqrt_s)
 
         # Get rapidities

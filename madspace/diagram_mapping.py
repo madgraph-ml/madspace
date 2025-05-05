@@ -24,8 +24,6 @@ from .invariants import (
 from .rambo import tRamboBlock
 from .chili import tChiliBlock
 
-from icecream import ic
-
 
 @dataclass(eq=False)
 class Line:

@@ -9,7 +9,7 @@ from math import pi
 from torch import Tensor, sqrt, log, sinh, cos, sin, exp
 
 from .base import PhaseSpaceMapping, TensorList
-from .functional.kinematics import rapidity, pT2, lsquare, phi
+from .functional.kinematics import rapidity, pT2, lsquare, phi, mass
 
 
 class tChiliBlock(PhaseSpaceMapping):
@@ -176,7 +176,7 @@ class tChiliBlock(PhaseSpaceMapping):
         p_out = p_ext[:, 2:]
         s = lsquare(p_in.sum(dim=1))
         e_cm = sqrt(s)
-        m_out = sqrt(lsquare(p_out))
+        m_out = mass(p_out)
 
         # Get relevant psum and energies etc
         psum_nm1 = p_out[:, :-1]  # sum over final states except last particle

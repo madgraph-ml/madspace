@@ -2,7 +2,7 @@
 
 import torch
 from torch import Tensor, sqrt, log, cos, sin, sqrt
-from .kinematics import kaellen, pi, lsquare
+from .kinematics import kaellen, pi
 
 
 def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
