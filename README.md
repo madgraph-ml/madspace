@@ -9,7 +9,7 @@ This repository contains a refactored version of the code used in our publicatio
 
 ```sh
 # clone the repository
-git clone https://github.com/madgraph-ml/MadSpace.git
+git clone https://github.com/madgraph-ml/madspace.git
 # then simply install
 cd MadSpace
 python setup.py
