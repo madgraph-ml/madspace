@@ -381,8 +381,7 @@ def esquare(a: Tensor) -> Tensor:
     Returns:
         Tensor: Square with shape=(b,...)
     """
-    a2 = a.square()
-    return a2[..., 0] + a2[..., 1] + a2[..., 2] + a2[..., 3]
+    return torch.einsum("...d,...d->...", a, a)
 
 
 def edot(a: Tensor, b: Tensor) -> Tensor:
@@ -396,8 +395,7 @@ def edot(a: Tensor, b: Tensor) -> Tensor:
     Returns:
         Tensor: Lorentzscalar with shape=(b,...)
     """
-    ab = a * b
-    return ab[..., 0] + ab[..., 1] + ab[..., 2] + ab[..., 3]
+    return torch.einsum("...d,...d->...", a, b)
 
 
 def boost(k: Tensor, p_boost: Tensor, inverse: bool = False) -> Tensor:
