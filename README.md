@@ -1,6 +1,14 @@
-# MadSpace
+<p align="center">
+  <img src="docs/_static/logo-light.png" width="250", alt="MadNIS">
+</p>
 
-Differentiable and GPU ready phase-space mapping written in PyTorch.
+<h3 align="center">Differentiable and GPU ready phase-space mappings</h3>
+
+<p align="center">
+<a href="https://arxiv.org/abs/2408.01486"><img alt="Arxiv" src="https://img.shields.io/badge/arXiv-2408.01486-b31b1b.svg"></a>
+<a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
+<a href="https://pytorch.org"><img alt="pytorch" src="https://img.shields.io/badge/PyTorch-2.0-DC583A.svg?style=flat&logo=pytorch"></a>
+</p>
 
 This repository contains a refactored version of the code used in our publication *Differentiable MadNIS-Lite*. 
 
