@@ -539,7 +539,7 @@ class Mahambo(PhaseSpaceMapping):
 class AutoregressiveMahambo(PhaseSpaceMapping):
     """
     (Massive) RamboOnDiet including luminosity sampling
-    for hadron colliders with trainable autorgressive blocks.
+    for hadron colliders with trainable autoregressive blocks.
     """
 
     def __init__(

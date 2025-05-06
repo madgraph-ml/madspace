@@ -20,8 +20,8 @@ MadSpace contains and supports a selection of different phase-space mappings whi
 - Rambo on diet [https://arxiv.org/abs/1308.2922]
 - Mahambo [https://arxiv.org/abs/2305.07696]
 - Diagram based [see this paper]
+- 1 $\to$ 3  block [https://freidok.uni-freiburg.de/data/154629]
 - including trainable variants of the above
-- 1$\to$3 Block [https://freidok.uni-freiburg.de/data/154629]
 
 
 ## Installation
@@ -33,6 +33,10 @@ git clone https://github.com/madgraph-ml/madspace.git
 cd madspace
 pip install .
 ```
+
+## Usage example
+
+For an example usage of, for instance Mahambo, see `examples/rambo/rambo_examply.py`
 
 ## Citation
 
