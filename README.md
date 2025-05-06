@@ -14,7 +14,7 @@ This repository contains a refactored version of the code used in our publicatio
 
 ## Supported mappings
 
-**MadSpace contains** and supports a selection of different phase-space mappings which are useful for collider physics:
+**MadSpace** contains and supports a selection of different phase-space mappings which are useful for collider physics:
 - Chili [https://arxiv.org/abs/2302.10449]
 - Rambo [Comput. Phys. Commun. 40 (1986) 359-373]
 - Rambo on diet [https://arxiv.org/abs/1308.2922]
