@@ -12,6 +12,17 @@
 
 This repository contains a refactored version of the code used in our publication *Differentiable MadNIS-Lite*. 
 
+## Supported mappings
+
+MadSpace contains and supports a selection of different phase-space mappings which are useful for collider physics
+- Chili [https://arxiv.org/abs/2302.10449]
+- Rambo [Comput. Phys. Commun. 40 (1986) 359-373]
+- Rambo on diet [https://arxiv.org/abs/1308.2922]
+- Mahambo [https://arxiv.org/abs/2305.07696]
+- Diagram based [see this paper]
+- including trainable variants of the above
+- 1$\to$3 Block [https://freidok.uni-freiburg.de/data/154629]
+
 
 ## Installation
 
