@@ -36,7 +36,7 @@ pip install .
 
 ## Usage example
 
-For an example usage of, for instance Mahambo, see `examples/rambo/rambo_examply.py`
+For an example usage of, for instance Mahambo, see `examples/rambo/rambo_example.py`
 
 ## Citation
 
