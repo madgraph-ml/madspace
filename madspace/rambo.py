@@ -37,15 +37,20 @@ class Rambo(PhaseSpaceMapping):
         self,
         nparticles: int,
         masses: list[float] = None,
+        debug: bool = False,
     ):
         self.nparticles = nparticles
 
-        if masses is not None:
+        if masses is not None and sum(masses) > 0.0:
+            if debug:
+                print("Using massive Rambo!")
             self.masses = torch.tensor(masses)
             assert len(self.masses) == self.nparticles
             self.e_min = sum(masses)
         else:
-            self.masses = masses
+            if debug:
+                print("Using massless Rambo!")
+            self.masses = None
             self.e_min = 0.0
 
         dims_in = [(4 * nparticles,), ()]
@@ -186,16 +191,21 @@ class RamboOnDiet(PhaseSpaceMapping):
         nparticles: int,
         masses: list[float] = None,
         check_emin: bool = False,
+        debug: bool = False,
     ):
         self.nparticles = nparticles
         self.check_emin = check_emin
 
-        if masses is not None:
+        if masses is not None and sum(masses) > 0.0:
+            if debug:
+                print("Using massive RamboOnDiet!")
             self.masses = torch.tensor(masses)
             assert len(self.masses) == self.nparticles
             self.e_min = sum(masses)
         else:
-            self.masses = masses
+            if debug:
+                print("Using massless RamboOnDiet!")
+            self.masses = None
             self.e_min = 0.0
 
         dims_in = [(3 * nparticles - 4,), ()]
@@ -320,7 +330,7 @@ class RamboOnDiet(PhaseSpaceMapping):
         # Get input momenta
         p_ext = inputs[0]
         k = p_ext[:, 2:]
-        e_cm = (k.sum(dim=1))
+        e_cm = k.sum(dim=1)
         w0 = self._massles_weight(e_cm)
 
         # Make momenta massless before going back to random numbers
