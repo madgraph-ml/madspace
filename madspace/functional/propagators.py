@@ -74,7 +74,7 @@ def stable_propagator(
     nu: float = 1.0,
     inverse: bool = False,
 ) -> Tuple[Tensor, Tensor]:
-    """Performs mapping for vanishing widths propagators
+    r"""Performs mapping for vanishing widths propagators
     \propto 1/(s-m)^2 described in (C.5) in [2].
     """
     # define common variables
@@ -101,7 +101,7 @@ def stable_propagator_nu(
     nu: float = 1.4,
     inverse: bool = False,
 ) -> Tuple[Tensor, Tensor]:
-    """Performs mapping for vanishing widths propagators
+    r"""Performs mapping for vanishing widths propagators
     \propto 1/(s-m)^2 described in (C.4) in [2].
     """
     # define common variables
@@ -131,7 +131,7 @@ def massles_propagator(
     inverse: bool = False,
 ) -> Tuple[Tensor, Tensor]:
     # define common variables
-    """Performs mapping for massless propagators
+    r"""Performs mapping for massless propagators
     \propto 1/s^2 described in (C.5) in [2].
     Uses a negative m^2 = -a to avoid instabilities
     when s_min = 0. , with a = -1e-8 as mentioned in [3]
@@ -158,7 +158,7 @@ def massless_propagator_nu(
     nu: float = 1.4,
     inverse: bool = False,
 ) -> Tuple[Tensor, Tensor]:
-    """Performs mapping for massless propagators
+    r"""Performs mapping for massless propagators
     \propto 1/s^2 described in (C.4) in [2].
     Uses a negative m^2 = -a to avoid instabilities
     when s_min = 0. , with a = -1e-8 as mentioned in [3]
