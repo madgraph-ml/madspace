@@ -1,9 +1,9 @@
-""" Kinematic functions needed for phase-space mappings """
+"""Kinematic functions needed for phase-space mappings"""
 
-import torch
-from torch import Tensor, cos, sin, cosh, sinh, sqrt, log, atan2
 from math import pi
 
+import torch
+from torch import Tensor, atan2, cos, cosh, log, sin, sinh, sqrt
 
 DTYE = torch.get_default_dtype()
 EPS = 1e-12 if DTYE == torch.float64 else 1e-6
@@ -23,6 +23,41 @@ def kaellen(x: Tensor, y: Tensor, z: Tensor) -> Tensor:
         Tensor: Kaellen function
     """
     return (x - y - z) ** 2 - 4 * y * z
+
+
+def bk_g(x: Tensor, y: Tensor, z: Tensor, u: Tensor, v: Tensor, w: Tensor) -> Tensor:
+    """Definition of the Byckling–Kajantie G-function as defined in Eq. (A5) in [1]
+
+    [1] E. Byckling and K. Kajantie,
+    ``Reductions of the phase-space integral in terms of simpler processes,''
+    Phys. Rev. 187 (1969), doi:10.1103/PhysRev.187.2008.
+
+    Args:
+        x (Tensor): input 1
+        y (Tensor): input 2
+        z (Tensor): input 3
+        u (Tensor): input 4
+        v (Tensor): input 5
+        w (Tensor): input 6
+
+    Returns:
+        Tensor: G function (related to Gram determinant of three 4-vectors, see (A4) in [1])
+    """
+    return (
+        x * x * y
+        + x * y * y
+        + z * z * u
+        + z * u * u
+        + v * v * w
+        + v * w * w
+        + x * z * w
+        + x * u * v
+        + y * z * v
+        + y * u * w
+        - x * y * (z + u + v + w)
+        - z * u * (x + y + v + w)
+        - v * w * (x + y + z + u)
+    )
 
 
 def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
