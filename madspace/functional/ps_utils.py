@@ -1,8 +1,9 @@
-""" Helper functions needed for phase-space mappings """
+"""Helper functions needed for phase-space mappings"""
 
 import torch
-from torch import Tensor, sqrt, log, cos, sin, sqrt
-from .kinematics import kaellen, pi
+from torch import Tensor, cos, log, sin, sqrt
+
+from .kinematics import kaellen, lsquare, mass, pi
 
 
 def two_particle_density(s: Tensor, p1_2: Tensor, p2_2: Tensor) -> Tensor:
@@ -143,3 +144,32 @@ def two_body_decay_factor(
             * (M_i_minus_1**2 - (M_i - m_i_minus_1) ** 2)
         )
     )
+
+
+def build_invm_tables(p4: Tensor) -> tuple[Tensor, Tensor]:
+    """
+    Args:
+        p4: (b, n, 4) four-momenta of final-state particles (on-shell)
+
+    Returns:
+        invm:     (..., 2**n) with invm[mask] = (sum_{i in mask} p_i)^2
+        invm_min: (..., 2**n) with invm_min[mask] = (sum_{i in mask} m_i)^2
+    """
+    n = p4.shape[1]
+    n_masks = 1 << n
+    masks = torch.arange(n_masks, device=p4.device)  # (n_masks,)
+    bits = (masks[:, None] >> torch.arange(n, device=p4.device)) & 1  # (n_masks, n)
+    sel = bits.to(p4.dtype).unsqueeze(-1)  # (n_masks, n, 1)
+
+    # Sum four-momenta for each mask
+    p4_exp = p4.unsqueeze(-3)  # (b, 1, n, 4)
+    p4_sum = (sel * p4_exp).sum(dim=-2)  # (b, n_masks, 4)
+    invm2 = lsquare(p4_sum)  # (b, n_masks)
+
+    # Minimal allowed mass^2 per mask: (sum of rest masses)^2
+    m = mass(p4)  # (b, n)
+    m_exp = m.unsqueeze(-2)  # (b, 1, n)
+    mass_sum = (bits.to(m.dtype) * m_exp).sum(dim=-1)  # (b, n_masks)
+    invm2_min = mass_sum**2
+
+    return invm2, invm2_min

@@ -1,17 +1,11 @@
-""" Implement propagator mappings.
-
-    Based on the mappings described in
-    [1] https://arxiv.org/abs/hep-ph/0206070v2
-
-    and described more precisely in
-    [2] https://arxiv.org/abs/hep-ph/0008033
-    [3] https://freidok.uni-freiburg.de/data/154629
+"""Implement helper functions needed for the t-channel mappings defined in
+https://arxiv.org/pdf/hep-ph/0008033
 """
 
-
-from torch import Tensor, sqrt
 import torch
-from .kinematics import kaellen, EPS
+from torch import Tensor, sqrt
+
+from .kinematics import EPS, kaellen
 
 
 def costheta_to_invt(
@@ -22,7 +16,8 @@ def costheta_to_invt(
     m2: Tensor,
     costheta: Tensor,
 ) -> Tensor:
-    """Mandelstam invariant t=(p1-k1)^2 formula (C.21) in https://arxiv.org/pdf/hep-ph/0008033.pdf
+    """
+    Mandelstam invariant t=(p1-k1)^2 formula (C.21) in https://arxiv.org/pdf/hep-ph/0008033.pdf
     p=p1+p2 is at rest;
     p1, p2 are opposite along z-axis
     k1, k4 are opposite along the direction defined by theta
@@ -52,7 +47,4 @@ def invt_to_costheta(
     num = num1 + num2
     denom = sqrt(kaellen(s, m1**2, m2**2)) * sqrt(kaellen(s, p1_2, p2_2))
     costheta = num / torch.clip(denom, min=EPS)
-    #if costheta.isnan().any():
-    #    mask = costheta.isnan()
-    #    ic(num1[mask], num2[mask], num[mask], denom[mask], costheta[mask])
     return torch.clamp_(costheta, -1.0, 1.0)
