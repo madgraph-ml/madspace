@@ -703,7 +703,7 @@ class tRamboBlock(PhaseSpaceMapping):
         [2] Rambo on diet - https://arxiv.org/abs/1308.2922
 
     We allow for external masses as input parameter to combine this
-    as global t-channel Block with additional s-channel decays.
+    as global t-channel block with additional s-channel decays.
     """
 
     def __init__(
@@ -726,7 +726,7 @@ class tRamboBlock(PhaseSpaceMapping):
             inputs: list of tensors [r, e_cm, m_out]
                 r: random numbers with shape=(b,3*n-4)
                 e_cm: COM energy with shape=(b,) or shape=()
-                m_out: (virtual) masses of outgoing particles with shape=(b,n)
+                m_out: (virtual, time-like) masses of outgoing particles with shape=(b,n)
 
         Returns:
             p_in (Tensor): incoming momenta with shape=(b,2,4)
@@ -827,7 +827,7 @@ class tRamboBlock(PhaseSpaceMapping):
         Returns:
             r (Tensor): random numbers with shape=(b,3*n-4)
             e_cm (Tensor): COM energy with shape=(b,)
-            m_out (Tensor): (virtual) masses of outgoing particles with shape=(b,n)
+            m_out (Tensor): (virtual, time-like) masses  of outgoing particles with shape=(b,n)
             det (Tensor): det of mapping with shape=(b,)
         """
         del condition

@@ -97,20 +97,13 @@ def rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
         p' (Tensor): Rotated vector
     """
     sintheta = sqrt(1 - costheta**2)
+    p0, p1, p2, p3 = p[..., 0], p[..., 1], p[..., 2], p[..., 3]
 
     # Define the rotation
-    q0 = p[..., 0]
-    q1 = (
-        p[..., 1] * costheta * cos(phi)
-        + p[..., 3] * sintheta * cos(phi)
-        - p[..., 2] * sin(phi)
-    )
-    q2 = (
-        p[..., 1] * costheta * sin(phi)
-        + p[..., 3] * sintheta * sin(phi)
-        + p[..., 2] * cos(phi)
-    )
-    q3 = p[..., 3] * costheta - p[:, 1] * sintheta
+    q0 = p0
+    q1 = p1 * costheta * cos(phi) + p3 * sintheta * cos(phi) - p2 * sin(phi)
+    q2 = p1 * costheta * sin(phi) + p3 * sintheta * sin(phi) + p2 * cos(phi)
+    q3 = p3 * costheta - p1 * sintheta
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
 
@@ -129,22 +122,153 @@ def inv_rotate_zy(p: Tensor, phi: Tensor, costheta: Tensor) -> Tensor:
         p' (Tensor): Rotated vector
     """
     sintheta = sqrt(1 - costheta**2)
+    p0, p1, p2, p3 = p[..., 0], p[..., 1], p[..., 2], p[..., 3]
 
     # Define the rotation
-    q0 = p[..., 0]
-    q1 = (
-        p[..., 1] * costheta * cos(phi)
-        + p[..., 2] * costheta * sin(phi)
-        - p[..., 3] * sintheta
-    )
-    q2 = p[..., 2] * cos(phi) - p[:, 1] * sin(phi)
-    q3 = (
-        p[..., 3] * costheta
-        + p[..., 1] * sintheta * cos(phi)
-        + p[..., 2] * sintheta * sin(phi)
-    )
+    q0 = p0
+    q1 = p1 * costheta * cos(phi) + p2 * costheta * sin(phi) - p3 * sintheta
+    q2 = p2 * cos(phi) - p1 * sin(phi)
+    q3 = p3 * costheta + p1 * sintheta * cos(phi) + p2 * sintheta * sin(phi)
 
     return torch.stack((q0, q1, q2, q3), dim=-1)
+
+
+def rotate_z(p: Tensor, phi: Tensor) -> Tensor:
+    """Performs rotation around z-axis:
+
+        p -> p' = R_z(phi).p
+
+    Special case of rotate_zy with theta=0.
+
+    Args:
+        p (Tensor): 4-momentum to rotate with shape=(b,...,4)
+        phi (Tensor): rotation angle phi shape=(b,...)
+
+    Returns:
+        p' (Tensor): Rotated vector
+    """
+    p0, p1, p2, p3 = p[..., 0], p[..., 1], p[..., 2], p[..., 3]
+    # Define the rotation
+    q0 = p0
+    q1 = p1 * cos(phi) - p2 * sin(phi)
+    q2 = p1 * sin(phi) + p2 * cos(phi)
+    q3 = p3
+
+    return torch.stack((q0, q1, q2, q3), dim=-1)
+
+
+def inv_rotate_z(p: Tensor, phi: Tensor) -> Tensor:
+    """Performs inverserotation around z-axis:
+
+        p' -> p = R_z(-phi).p'
+
+    Special case of rotate_zy with theta=0.
+
+    Args:
+        p (Tensor): 4-momentum to rotate with shape=(b,...,4)
+        phi (Tensor): rotation angle phi shape=(b,...)
+
+    Returns:
+        p' (Tensor): Rotated vector
+    """
+    p0, p1, p2, p3 = p[..., 0], p[..., 1], p[..., 2], p[..., 3]
+
+    # Define the rotation
+    q0 = p0
+    q1 = p1 * cos(phi) + p2 * sin(phi)
+    q2 = p2 * cos(phi) - p1 * sin(phi)
+    q3 = p3
+
+    return torch.stack((q0, q1, q2, q3), dim=-1)
+
+
+def rotxxx(p: Tensor, q: Tensor) -> Tensor:
+    """
+    This function performs the spacial rotation of a four-momentum.
+    The momentum p is assumed to be given in the frame where the spacial
+    component of q points the positive z-axis.
+
+    Args:
+        p (Tensor): Four-momentum to rotate. Spatial part is given in the frame where q points along +z
+            with shape (b,..., 4)
+        q (Tensor): Four-momentum whose spatial direction defines the target frame (only q[...,1:3] used).
+            with shape (b,..., 4)
+
+    Returns:
+        prot (Tensor): Rotated four-momentum p in the frame where q has its given spatial direction
+            with shape (b,..., 4)
+    """
+    # Copy time component (pure rotation → p0 unchanged)
+    p0 = p[..., 0]
+    p1, p2, p3 = p[..., 1], p[..., 2], p[..., 3]
+
+    q1, q2, q3 = q[..., 1], q[..., 2], q[..., 3]
+    qt2 = pT2(q)
+    qt = sqrt(qt2.clamp(min=EPS))
+    qq = sqrt(pmag2(q).clamp(min=EPS))
+
+    # General-case formulas (qt2 > 0)
+    # prot(1) = q1*q3/qq/qt*p1 - q2/qt*p2 + q1/qq*p3
+    # prot(2) = q2*q3/qq/qt*p1 + q1/qt*p2 + q2/qq*p3
+    # prot(3) =      -qt/qq*p1            + q3/qq*p3
+    prot1_gen = (q1 * q3) / (qq * qt) * p1 - (q2 / qt) * p2 + (q1 / qq) * p3
+    prot2_gen = (q2 * q3) / (qq * qt) * p1 + (q1 / qt) * p2 + (q2 / qq) * p3
+    prot3_gen = -(qt / qq) * p1 + (q3 / qq) * p3
+
+    # Special case qt2 == 0  (q along ±z or zero) → Fortran does:
+    #   if q3 == 0: prot(1:3) = p(1:3)
+    #   else:       prot(1:3) = sign(q3) * p(1:3)
+    mask_qt0 = qt2 < EPS
+    psgn = torch.where(q3 >= -EPS, p1.new_tensor(1.0), p1.new_tensor(-1.0))
+
+    prot1 = torch.where(mask_qt0, psgn * p1, prot1_gen)
+    prot2 = torch.where(mask_qt0, psgn * p2, prot2_gen)
+    prot3 = torch.where(mask_qt0, psgn * p3, prot3_gen)
+
+    return torch.stack((p0, prot1, prot2, prot3), dim=-1)
+
+
+def rotxxx_inv(prot: Tensor, q: Tensor) -> Tensor:
+    """
+    Same as rotxxx, but inverse. That is, first doing
+    rotxxx(p,q) and then rotxxx_inv(prot,q) should give you
+    back the original p.
+
+    Args:
+        prot (Tensor): Rotated four-momentum with shape (b,..., 4)
+        q (Tensor): Reference four-momentum (only spatial part used), shape (b,...,4).
+
+    Returns:
+        p (Tensor): Four-momentum in the q-aligned (+z) frame, shape (b,...,4).
+    """
+    # Copy time component (pure rotation → p0 unchanged)
+    p0 = prot[..., 0]
+    v1, v2, v3 = prot[..., 1], prot[..., 2], prot[..., 3]
+
+    q1, q2, q3 = q[..., 1], q[..., 2], q[..., 3]
+    qt2 = pT2(q)
+    qt = sqrt(qt2.clamp(min=EPS))
+    qq = sqrt(pmag2(q).clamp(min=EPS))
+
+    # R^T(q) applied to (v1,v2,v3):
+    # [p1] = [ q1*q3/(qq*qt)   q2*q3/(qq*qt)   -qt/qq ] [v1]
+    # [p2]   [    -q2/qt          q1/qt          0    ]  [v2]
+    # [p3]   [     q1/qq          q2/qq        q3/qq  ] [v3]
+    p1_gen = (q1 * q3) / (qq * qt) * v1 + (q2 * q3) / (qq * qt) * v2 - (qt / qq) * v3
+    p2_gen = -(q2 / qt) * v1 + (q1 / qt) * v2
+    p3_gen = (q1 / qq) * v1 + (q2 / qq) * v2 + (q3 / qq) * v3
+
+    # Special case qt2 == 0  (q along ±z or zero) → Fortran does:
+    #   if q3 == 0: prot(1:3) = p(1:3)
+    #   else:       prot(1:3) = sign(q3) * p(1:3)
+    mask_qt0 = qt2 < EPS
+    psgn = torch.where(q3 >= -EPS, v1.new_tensor(1.0), v1.new_tensor(-1.0))
+
+    p1 = torch.where(mask_qt0, psgn * v1, p1_gen)
+    p2 = torch.where(mask_qt0, psgn * v2, p2_gen)
+    p3 = torch.where(mask_qt0, psgn * v3, p3_gen)
+
+    return torch.stack((p0, p1, p2, p3), dim=-1)
 
 
 def rapidity(p: Tensor) -> Tensor:

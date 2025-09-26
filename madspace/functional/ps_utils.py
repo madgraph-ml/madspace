@@ -149,11 +149,11 @@ def two_body_decay_factor(
 def build_invm_tables(p4: Tensor) -> tuple[Tensor, Tensor]:
     """
     Args:
-        p4: (b, n, 4) four-momenta of final-state particles (on-shell)
+        p4 (Tensor): four-momenta of final-state particles (on-shell) with shape=(b, n, 4)
 
     Returns:
-        invm:     (..., 2**n) with invm[mask] = (sum_{i in mask} p_i)^2
-        invm_min: (..., 2**n) with invm_min[mask] = (sum_{i in mask} m_i)^2
+        invm2 (Tensor):  = (sum_{i in mask} p_i)^2 with shape=(b, 2**n)
+        invm2_min (Tensor): invm2_min[mask] = (sum_{i in mask} m_i)^2 with shape=(b, 2**n)
     """
     n = p4.shape[1]
     n_masks = 1 << n
