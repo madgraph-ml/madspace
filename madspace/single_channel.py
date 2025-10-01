@@ -12,10 +12,10 @@ from math import pi
 from .base import PhaseSpaceMapping, TensorList
 from .functional.kinematics import boost_beam, lsquare
 from .twoparticle import (
-    tInvariantTwoParticleCOM,
-    tInvariantTwoParticleLAB,
-    TwoParticleLAB,
-    TwoParticleCOM,
+    TwoToTwoScatteringCOM,
+    TwoToTwoScatteringLAB,
+    TwoBodyDecayLAB,
+    TwoBodyDecayCOM,
 )
 from .luminosity import Luminosity, ResonantLuminosity
 from .invariants import (
@@ -80,9 +80,9 @@ class SingleChannelWWW(PhaseSpaceMapping):
 
         # Define mappings
         self.luminosity = Luminosity(s_lab, self.s_hat_min)  # 2dof
-        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2dof
+        self.t1 = TwoToTwoScatteringCOM(flat=True)  # 2dof
         self.s12 = MasslessInvariantBlock() #BreitWignerInvariantBlock(mz, wz)  # 1 dof
-        self.decay = TwoParticleLAB()  # 2 dof
+        self.decay = TwoBodyDecayLAB()  # 2 dof
 
         # Get correct factors of pi
         # has to be (2*Pi)^(4-3*n)
@@ -268,9 +268,9 @@ class SingleChannelVBS(PhaseSpaceMapping):
 
         # Define mappings
         self.luminosity = Luminosity(s_lab, s_hat_min)  # 2dof
-        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2dof
-        self.t2 = tInvariantTwoParticleLAB(flat=True)  # 2dof
-        self.t3 = tInvariantTwoParticleLAB(flat=True)  # 2dof
+        self.t1 = TwoToTwoScatteringCOM(flat=True)  # 2dof
+        self.t2 = TwoToTwoScatteringLAB(flat=True)  # 2dof
+        self.t3 = TwoToTwoScatteringLAB(flat=True)  # 2dof
 
         self.s12 = UniformInvariantBlock()  # 1 dof
         self.s123 = UniformInvariantBlock()  # 1 dof
@@ -521,9 +521,9 @@ class Diagramm_ww_llvv(PhaseSpaceMapping):
 
         self.s12 = BreitWignerInvariantBlock(mw, ww)  # 1 dof
         self.s34 = BreitWignerInvariantBlock(mw, ww)  # 1 dof
-        self.decay1 = TwoParticleCOM()  # 2 dof
-        self.decay2 = TwoParticleLAB()  # 2 dof
-        self.decay3 = TwoParticleLAB()  # 2 dof
+        self.decay1 = TwoBodyDecayCOM()  # 2 dof
+        self.decay2 = TwoBodyDecayLAB()  # 2 dof
+        self.decay3 = TwoBodyDecayLAB()  # 2 dof
 
         self.leptonic = leptonic
 
@@ -712,10 +712,10 @@ class Diagramm_llvvA(PhaseSpaceMapping):
         else:
             self.s234 = MasslessInvariantBlock()  # 1 dof
         self.s1234 = UniformInvariantBlock()  # 1 dof
-        self.t1 = tInvariantTwoParticleCOM(flat=True)  # 2 dof
-        self.t2 = tInvariantTwoParticleLAB(flat=True)  # 2 dof
-        self.d23 = TwoParticleLAB()  # 2 dof
-        self.d234 = TwoParticleLAB()  # 2 dof
+        self.t1 = TwoToTwoScatteringCOM(flat=True)  # 2 dof
+        self.t2 = TwoToTwoScatteringLAB(flat=True)  # 2 dof
+        self.d23 = TwoBodyDecayLAB()  # 2 dof
+        self.d234 = TwoBodyDecayLAB()  # 2 dof
 
         self.leptonic = leptonic
 

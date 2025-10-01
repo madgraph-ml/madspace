@@ -1,19 +1,20 @@
-""" Implement propagator mappings.
+"""Implement propagator mappings.
 
-    Based on the mappings described in
-    [1] https://arxiv.org/abs/hep-ph/0206070v2
+Based on the mappings described in
+[1] https://arxiv.org/abs/hep-ph/0206070v2
 
-    and described more precisely in
-    [2] https://arxiv.org/abs/hep-ph/0008033
-    [3] https://freidok.uni-freiburg.de/data/154629
+and described more precisely in
+[2] https://arxiv.org/abs/hep-ph/0008033
+[3] https://freidok.uni-freiburg.de/data/154629
 """
 
-
 from typing import Tuple
+
 import torch
-from torch import Tensor, log, atan, tan
+from torch import Tensor, atan, log, tan
 
 from .kinematics import EPS
+
 
 def uniform_propagator(
     r_or_s: Tensor,

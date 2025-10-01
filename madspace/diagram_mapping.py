@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from math import pi
 
@@ -6,23 +7,23 @@ import torch
 from torch import Tensor
 
 from .base import PhaseSpaceMapping, TensorList
+from .chili import tChiliBlock
 from .functional.kinematics import boost_beam, lsquare, mass
 from .functional.ps_utils import build_p_in
-from .twoparticle import (
-    tInvariantTwoParticleCOM,
-    tInvariantTwoParticleLAB,
-    TwoParticleLAB,
-    TwoParticleCOM,
-)
-from .luminosity import Luminosity, ResonantLuminosity
 from .invariants import (
     BreitWignerInvariantBlock,
-    UniformInvariantBlock,
     MasslessInvariantBlock,
     StableInvariantBlock,
+    UniformInvariantBlock,
 )
+from .luminosity import Luminosity, ResonantLuminosity
 from .rambo import tRamboBlock
-from .chili import tChiliBlock
+from .twoparticle import (
+    TwoBodyDecayCOM,
+    TwoBodyDecayLAB,
+    TwoToTwoScatteringCOM,
+    TwoToTwoScatteringLAB,
+)
 
 
 @dataclass(eq=False)
@@ -150,7 +151,9 @@ class Diagram:
                     next_line for next_line in vertex.lines if next_line is not line
                 ]
                 next_vertices = [vertex] * len(next_lines)
-                out_indices.extend(self._permutation_recursive(next_lines, next_vertices))
+                out_indices.extend(
+                    self._permutation_recursive(next_lines, next_vertices)
+                )
         return out_indices
 
     def _init_s_channel(self):
@@ -240,24 +243,10 @@ class tDiagramMapping(PhaseSpaceMapping):
         none_if_zero = lambda x: None if x == 0 else x
 
         last_t_line = diagram.t_channel_lines[-1]
-        self.t_invariants = [
-            tInvariantTwoParticleCOM(flat=True)
-            #tInvariantTwoParticleCOM(nu=1.4)
-            #if last_t_line.mass == 0.0
-            #else tInvariantTwoParticleCOM(
-            #    mt=none_if_zero(last_t_line.mass), wt=none_if_zero(last_t_line.width)
-            #)
-        ]
+        self.t_invariants = [TwoToTwoScatteringCOM(flat=True)]
         self.s_uniform_invariants = []
         for line in reversed(diagram.t_channel_lines[:-1]):
-            self.t_invariants.append(
-                tInvariantTwoParticleLAB(flat=True)
-                #tInvariantTwoParticleLAB(nu=1.4)
-                #if line.mass == 0.0
-                #else tInvariantTwoParticleLAB(
-                #    mt=none_if_zero(line.mass), wt=none_if_zero(line.width)
-                #)
-            )
+            self.t_invariants.append(TwoToTwoScatteringLAB(flat=True))
             self.s_uniform_invariants.append(UniformInvariantBlock())
 
     def map(self, inputs: TensorList, condition=None):
@@ -305,13 +294,13 @@ class tDiagramMapping(PhaseSpaceMapping):
         p_out = []
         p_t_in = p_in
         p2_rest = p2
-        #cnt = len(self.t_invariants)
+        # cnt = len(self.t_invariants)
         for invariant, cum_m_out, mass in zip(
             self.t_invariants,
             reversed(cumulated_m_out),
             reversed(m_out[:, 1:].unbind(dim=1)),
         ):
-            #cnt -= 1
+            # cnt -= 1
             m_t = torch.cat([cum_m_out, mass[:, None]], dim=1)
             r = rand(2)
             (ks,), jac = invariant.map([r, m_t], condition=[p_t_in])
@@ -354,7 +343,9 @@ class tDiagramMapping(PhaseSpaceMapping):
             [torch.zeros_like(p_out[:, :1]), p_out[:, 2:].flip([1])], dim=1
         ).cumsum(dim=1)
         ss = lsquare(cum_p)
-        s_maxs = (e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1).flip([1])).square()
+        s_maxs = (
+            e_cm[:, None] - m_out.flip([1])[:, :-2].cumsum(dim=1).flip([1])
+        ).square()
         s_mins = (ss[:, :-2].sqrt() + m_out[:, 1:-1]).square()
         p_t_ins = torch.stack(
             [
@@ -422,7 +413,9 @@ class DiagramMapping(PhaseSpaceMapping):
         self.s_decays = []
         line_iter = iter(diagram.s_channel_lines)
         s_decay_layers = (
-            diagram.s_decay_layers if self.has_t_channel else diagram.s_decay_layers[:-1]
+            diagram.s_decay_layers
+            if self.has_t_channel
+            else diagram.s_decay_layers[:-1]
         )
         for layer in s_decay_layers:
             sqs_iter = iter(sqrt_s_min)
@@ -430,7 +423,9 @@ class DiagramMapping(PhaseSpaceMapping):
             layer_invariants = []
             layer_decays = []
             for count in layer:
-                sqs_min = max(self.sqrt_s_epsilon, sum(next(sqs_iter) for i in range(count)))
+                sqs_min = max(
+                    self.sqrt_s_epsilon, sum(next(sqs_iter) for i in range(count))
+                )
                 sqrt_s_min.append(sqs_min)
                 if count == 1:
                     continue
@@ -444,12 +439,12 @@ class DiagramMapping(PhaseSpaceMapping):
                         else BreitWignerInvariantBlock(mass=line.mass, width=line.width)
                     )
                 )
-                layer_decays.append(TwoParticleLAB())
+                layer_decays.append(TwoBodyDecayLAB())
             self.s_decay_invariants.append(layer_invariants)
             self.s_decays.append(layer_decays)
         if not self.has_t_channel:
             self.s_decay_invariants.append([])
-            self.s_decays.append([TwoParticleCOM()])
+            self.s_decays.append([TwoBodyDecayCOM()])
 
         # Initialize luminosity and t-channel mapping
         s_hat_min = torch.tensor(max(sum(sqrt_s_min) ** 2, s_hat_min))
@@ -550,7 +545,7 @@ class DiagramMapping(PhaseSpaceMapping):
                 ps_weight *= jac
 
         if self.has_t_channel:
-            (p_in, p_out,), jac = self.t_mapping.map(
+            (p_in, p_out), jac = self.t_mapping.map(
                 [rand(self.t_random_numbers), sqrt_s_hat, torch.cat(sqrt_s, dim=1)]
             )
             if self.t_channel_type == "chili":
@@ -565,7 +560,9 @@ class DiagramMapping(PhaseSpaceMapping):
 
         # build the momenta of the decays
         for layer_counts, layer_decays, layer_masses in zip(
-            reversed(self.diagram.s_decay_layers), reversed(self.s_decays), reversed(decay_masses)
+            reversed(self.diagram.s_decay_layers),
+            reversed(self.s_decays),
+            reversed(decay_masses),
         ):
             p_out_prev = p_out
             p_out = []

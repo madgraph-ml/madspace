@@ -1,7 +1,6 @@
-""" Implement three-particle mappings.
-    Bases on the mappings described in
-    https://freidok.uni-freiburg.de/data/154629"""
-
+"""Implement three-particle mappings.
+Bases on the mappings described in
+https://freidok.uni-freiburg.de/data/154629"""
 
 import torch
 from torch import sqrt, atan2
@@ -20,10 +19,14 @@ from .functional.ps_utils import three_particle_density
 from .invariants import UniformInvariantBlock
 
 
-class ThreeParticleCOM(PhaseSpaceMapping):
+class ThreeBodyDecayCOM(PhaseSpaceMapping):
     """
-    Implement isotropic 3-particle phase-space, based on the mapping described in
+    Implement isotropic 3-body phase-space, based on the mapping described in
         [1] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the COM-frame and thus only requires the COM energy
+    and the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 3-body kinematics via two energies and three angles.
     """
 
     def __init__(self):
@@ -77,7 +80,7 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         dE2 = (p10**2 - m1sq) * ((Delta + Delta_23) ** 2 - 4 * m2sq * Delta)
         E2a = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
         E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
-        (p20,), p2_det = self.e1_map.map([r[:, 1]], [E2a, E2b])
+        (p20,), p2_det = self.e2_map.map([r[:, 1]], [E2a, E2b])
 
         # Define angles
         phi = 2 * pi * r[:, 2]
@@ -157,7 +160,7 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         dE2 = (p10**2 - m1sq) * ((Delta + Delta_23) ** 2 - 4 * m2sq * Delta)
         E2a = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
         E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
-        (r_p2,), p2_det_inv = self.e1_map.map([p20], [E2a, E2b])
+        (r_p2,), p2_det_inv = self.e2_map.map([p20], [E2a, E2b])
 
         # get p1/2 absolute momentum
         p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))
@@ -191,10 +194,14 @@ class ThreeParticleCOM(PhaseSpaceMapping):
         return density
 
 
-class ThreeParticleLAB(PhaseSpaceMapping):
+class ThreeBodyDecayLAB(PhaseSpaceMapping):
     """
-    Implement isotropic 3-particle phase-space, based on the mapping described in
+    Implement isotropic 3-body phase-space, based on the mapping described in
         [1] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the LAB-frame and thus requires the input momentum
+    in the lab frame. It also requires the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 3-body kinematics via two energies and three angles.
     """
 
     def __init__(self):
@@ -249,7 +256,7 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         dE2 = (p10**2 - m1sq) * ((Delta + Delta_23) ** 2 - 4 * m2sq * Delta)
         E2a = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
         E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
-        (p20,), p2_det = self.e1_map.map([r[:, 1]], [E2a, E2b])
+        (p20,), p2_det = self.e2_map.map([r[:, 1]], [E2a, E2b])
 
         # Define angles
         phi = 2 * pi * r[:, 2]
@@ -335,7 +342,7 @@ class ThreeParticleLAB(PhaseSpaceMapping):
         dE2 = (p10**2 - m1sq) * ((Delta + Delta_23) ** 2 - 4 * m2sq * Delta)
         E2a = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
         E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
-        (r_p2,), p2_det_inv = self.e1_map.map([p20], [E2a, E2b])
+        (r_p2,), p2_det_inv = self.e2_map.map([p20], [E2a, E2b])
 
         # get p1/2 absolute momentum
         p1mag = sqrt(edot(p1[:, 1:], p1[:, 1:]))

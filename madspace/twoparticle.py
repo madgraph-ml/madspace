@@ -1,39 +1,39 @@
-""" Implement two-particle mappings.
-    Bases on the mappings described in
-    [1] https://freidok.uni-freiburg.de/data/154629
-    [2] https://arxiv.org/abs/hep-ph/0008033
+"""Implement two-particle mappings.
+Bases on the mappings described in
+[1] https://freidok.uni-freiburg.de/data/154629
+[2] https://arxiv.org/abs/hep-ph/0008033
 """
 
-
 from typing import Optional
+
 import torch
-from torch import Tensor, sqrt, atan2
+from torch import Tensor, atan2, sqrt
 
 from .base import PhaseSpaceMapping, TensorList
 from .functional.kinematics import (
-    kaellen,
-    pmag,
-    rotate_zy,
-    inv_rotate_zy,
+    EPS,
     boost,
+    inv_rotate_zy,
+    kaellen,
     lsquare,
     mass,
     pi,
-    EPS,
+    pmag,
+    rotate_zy,
 )
-from .functional.ps_utils import two_particle_density, tinv_two_particle_density
-from .functional.tchannel import invt_to_costheta, costheta_to_invt
+from .functional.ps_utils import tinv_two_particle_density, two_particle_density
+from .functional.tchannel import costheta_to_invt, gen_mom_from_t_and_phi_com, tminmax
 from .invariants import (
     BreitWignerInvariantBlock,
-    UniformInvariantBlock,
     MasslessInvariantBlock,
     StableInvariantBlock,
+    UniformInvariantBlock,
 )
 
 
-class TwoParticleCOM(PhaseSpaceMapping):
+class TwoBodyDecayCOM(PhaseSpaceMapping):
     """
-    Implement isotropic 2-particle phase-space, based on the mapping described in
+    Implement isotropic 2-body phase-space, based on the mapping described in
         [2] https://arxiv.org/abs/hep-ph/0008033
         [3] https://freidok.uni-freiburg.de/data/154629
 
@@ -154,14 +154,15 @@ class TwoParticleCOM(PhaseSpaceMapping):
         return gs
 
 
-class TwoParticleLAB(PhaseSpaceMapping):
+class TwoBodyDecayLAB(PhaseSpaceMapping):
     """
-    Implement isotropic 2-particle phase-space, based on the mapping described in
+    Implement isotropic 2-body phase-space, based on the mapping described in
         [2] https://arxiv.org/abs/hep-ph/0008033
         [3] https://freidok.uni-freiburg.de/data/154629
 
     This is expressed in the LAB-frame and thus requires the input momentum
-    in the lab frame.
+    in the lab frame. It also requires the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 2-body kinematics via two angles (theta, phi).
     """
 
     def __init__(self):
@@ -278,11 +279,15 @@ class TwoParticleLAB(PhaseSpaceMapping):
         return gs
 
 
-class tInvariantTwoParticleCOM(PhaseSpaceMapping):
+class TwoToTwoScatteringCOM(PhaseSpaceMapping):
     """
-    Implement anisotropic decay, based on the mapping described in
+    Implement 2->2 scattering, based on the mapping described in
         [1] https://arxiv.org/abs/hep-ph/0008033
         [2] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the COM-frame and thus only requires the COM energy
+    and the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 2->2 kinematics via the Mandelstam t and an azimuthal angle phi.
     """
 
     def __init__(
@@ -346,30 +351,13 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         phi = 2 * r1 * pi - pi
         det_phi = 2 * pi
 
-        # get t_min and max
-        cos_min = (-1.0) * torch.ones_like(s)
-        cos_max = (+1.0) * torch.ones_like(s)
-        tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
-        tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
+        # sample t invariant
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
         (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
 
-        # Map from t to cos_theta (needs -t as it was sampled as |t|)
-        costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
-
-        # Define the momenta (in COM frame of decaying particle)
-        k1[:, 0] = (s + m1**2 - m2**2) / (2 * sqrt(s))
-        k1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / (2 * sqrt(s))
-
-        # Then rotate twice (within COM and into p1-axis)
-        p1mag = pmag(p1)
-        phi1 = atan2(p1[:, 2], p1[:, 1])
-        costheta1 = p1[:, 3] / p1mag.clip(min=EPS)
-        k1 = rotate_zy(k1, phi, costheta)
-        k1 = rotate_zy(k1, phi1, costheta1)
-        k2 = ptot - k1
-
         # get the density and decay momenta
-        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
+        k1, det_two_particle_inv = gen_mom_from_t_and_phi_com(p1, p2, t, phi, m1, m2)
+        k2 = ptot - k1
         p_out = torch.stack([k1, k2], dim=1)
 
         return (p_out,), det_t * det_two_particle_inv * det_phi
@@ -408,10 +396,7 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
-        cos_min = (-1.0) * torch.ones_like(s)
-        cos_max = (+1.0) * torch.ones_like(s)
-        tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
-        tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
 
         # Get the random numbers
@@ -435,11 +420,15 @@ class tInvariantTwoParticleCOM(PhaseSpaceMapping):
         return density
 
 
-class tInvariantTwoParticleLAB(PhaseSpaceMapping):
+class TwoToTwoScatteringLAB(PhaseSpaceMapping):
     """
-    Implement anisotropic decay, based on the mapping described in
+    Implement 2->2 scattering, based on the mapping described in
         [1] https://arxiv.org/abs/hep-ph/0008033
         [2] https://freidok.uni-freiburg.de/data/154629
+
+    This is expressed in the LAB-frame and thus requires the input momenta
+    in the lab frame and the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 2->2 kinematics via the Mandelstam t and an azimuthal angle phi.
     """
 
     def __init__(
@@ -489,6 +478,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         p1 = p_in[:, 0]
         p2 = p_in[:, 1]
         p1_com = boost(p1, ptot, inverse=True)
+        p2_com = boost(p2, ptot, inverse=True)
 
         # get invariants and incoming virtualities
         p1_2 = lsquare(p1)
@@ -505,27 +495,14 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         det_phi = 2 * pi
 
         # get t_min and max
-        cos_min = (-1.0) * torch.ones_like(s)
-        cos_max = (+1.0) * torch.ones_like(s)
-        tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
-        tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
         (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
 
-        # Map from t to cos_theta (needs -t as it samples |t|)
-        costheta = invt_to_costheta(s, p1_2, p2_2, m1, m2, -t)
-
-        # Define the momenta (in COM frame of decaying particle)
-        s_inv = torch.clip(2 * sqrt(s), min=EPS)
-        k1[:, 0] = (s + m1**2 - m2**2) / s_inv
-        k1[:, 3] = sqrt(kaellen(s, m1**2, m2**2)) / s_inv
-
-        # Then rotate twice (within COM and into p1-axis)
-        p1mag = pmag(p1_com)
-        phi1 = atan2(p1_com[:, 2], p1_com[:, 1])
-        costheta1 = p1_com[:, 3] / torch.clip(p1mag, min=EPS)
-        k1 = rotate_zy(k1, phi, costheta)
-        k1 = rotate_zy(k1, phi1, costheta1)
-        k1 = boost(k1, ptot)
+        # get the density and decay momenta
+        k1_com, det_two_particle_inv = gen_mom_from_t_and_phi_com(
+            p1_com, p2_com, t, phi, m1, m2
+        )
+        k1 = boost(k1_com, ptot)
         k2 = ptot - k1
 
         # get the density and outputs
@@ -570,10 +547,7 @@ class tInvariantTwoParticleLAB(PhaseSpaceMapping):
         phi = atan2(k1[:, 2], k1[:, 1])
 
         # Map from cos_theta to t
-        cos_min = (-1.0) * torch.ones_like(s)
-        cos_max = (+1.0) * torch.ones_like(s)
-        tmin = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_min)
-        tmax = costheta_to_invt(s, p1_2, p2_2, m1, m2, cos_max)
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
         t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
 
         # Get the random numbers

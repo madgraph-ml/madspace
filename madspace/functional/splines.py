@@ -1,8 +1,9 @@
-""" Implement Rational Quadratic splines.
-    Based on the pytorch implementation of
-    https://github.com/bayesiains/nsf """
+"""Implement Rational Quadratic splines.
+Based on the pytorch implementation of
+https://github.com/bayesiains/nsf"""
 
 import math
+
 import torch
 import torch.nn.functional as F
 
@@ -27,7 +28,7 @@ def unconstrained_rational_quadratic_spline(
     min_bin_height: float,
     min_derivative: float,
     periodic: bool = False,
-    sum_jacobian: bool = True
+    sum_jacobian: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Transform inputs using RQ splines defined by theta.
@@ -47,7 +48,9 @@ def unconstrained_rational_quadratic_spline(
     outside_interval_mask = ~inside_interval_mask
     masked_outputs = torch.zeros_like(inputs)
     masked_logabsdet = torch.zeros(
-        inputs.shape[:(1 if sum_jacobian else 2)], dtype=inputs.dtype, device=inputs.device
+        inputs.shape[: (1 if sum_jacobian else 2)],
+        dtype=inputs.dtype,
+        device=inputs.device,
     )
     masked_outputs[outside_interval_mask] = inputs[outside_interval_mask]
     masked_logabsdet[outside_interval_mask] = 0
@@ -77,11 +80,15 @@ def unconstrained_rational_quadratic_spline(
         min_derivative + math.log(2)
     )
     if periodic:
-        derivatives[...,-1] = derivatives[...,0]
-        periodic_shift = (right - left) / 2 * torch.tanh(unnormalized_derivatives[...,-1])
+        derivatives[..., -1] = derivatives[..., 0]
+        periodic_shift = (
+            (right - left) / 2 * torch.tanh(unnormalized_derivatives[..., -1])
+        )
 
         if not rev:
-            inputs = torch.remainder(inputs + periodic_shift - left, right - left) + left
+            inputs = (
+                torch.remainder(inputs + periodic_shift - left, right - left) + left
+            )
             infi = inputs[(inputs < left) | (inputs > right) | ~torch.isfinite(inputs)]
             if len(infi) > 0:
                 print(infi)
@@ -127,7 +134,9 @@ def unconstrained_rational_quadratic_spline(
         root = (2 * c) / (-b - torch.sqrt(discriminant))
         outputs = root * input_bin_widths + input_cumwidths
         if periodic:
-            outputs = torch.remainder(outputs - periodic_shift - left, right - left) + left
+            outputs = (
+                torch.remainder(outputs - periodic_shift - left, right - left) + left
+            )
 
         theta_one_minus_theta = root * (1 - root)
         denominator = input_delta + (
