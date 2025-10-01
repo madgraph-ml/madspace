@@ -1,6 +1,10 @@
 from madspace.diagram_mapping import *
-from madspace.single_channel import SingleChannelVBS, SingleChannelWWW, Diagramm_llvvA, Diagramm_ww_llvv
-from icecream import ic
+from madspace.single_channel import (
+    Diagramm_llvvA,
+    Diagramm_ww_llvv,
+    SingleChannelVBS,
+    SingleChannelWWW,
+)
 
 torch.set_default_dtype(torch.float64)
 
@@ -34,7 +38,7 @@ r = torch.rand(nsamples, 10)
 vbs = Diagram(
     incoming=[in1, in2], outgoing=[out1, out2, out3, out4], vertices=[v1, v2, v3, v4]
 )
-dmap = DiagramMapping(vbs, torch.tensor(13000.**2))
+dmap = DiagramMapping(vbs, torch.tensor(13000.0**2))
 
 (p, x), jac_fw = dmap.map([r])
 print("+++++++++++++++++++")
@@ -42,7 +46,7 @@ print("+++++++++++++++++++")
 
 
 print("Δr  ", (r - r_inv).abs().max())
-print("Δjac", (jac_fw * jac_inv - 1.).abs().max())
+print("Δjac", (jac_fw * jac_inv - 1.0).abs().max())
 
 """
 in1 = Line()

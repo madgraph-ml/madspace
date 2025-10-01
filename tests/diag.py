@@ -1,6 +1,10 @@
 from madspace.diagram_mapping import *
-from madspace.single_channel import SingleChannelVBS, SingleChannelWWW, Diagramm_llvvA, Diagramm_ww_llvv
-from icecream import ic
+from madspace.single_channel import (
+    Diagramm_llvvA,
+    Diagramm_ww_llvv,
+    SingleChannelVBS,
+    SingleChannelWWW,
+)
 
 torch.set_default_dtype(torch.float64)
 
@@ -40,13 +44,13 @@ v3 = Vertex([t2, out3, t1])
 v4 = Vertex([t1, out4, in2])
 
 r = torch.rand(nsamples, 10)
-vbsmap = SingleChannelVBS(torch.tensor(13000.**2), torch.tensor([MW]))
+vbsmap = SingleChannelVBS(torch.tensor(13000.0**2), torch.tensor([MW]))
 (p_hand, x_hand), jac_hand = vbsmap.map([r])
 
 vbs = Diagram(
     incoming=[in1, in2], outgoing=[out1, out2, out3, out4], vertices=[v1, v2, v3, v4]
 )
-dmap = DiagramMapping(vbs, torch.tensor(13000.**2))
+dmap = DiagramMapping(vbs, torch.tensor(13000.0**2))
 (p_auto, x_auto), jac_auto = dmap.map([r])
 (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
@@ -55,7 +59,7 @@ print("Δp max    ", (p_auto - p_hand).abs().max())
 print("Δx max    ", (x_auto - x_hand).abs().max())
 print("Δjac max  ", (jac_auto - jac_hand).abs().max())
 print("inv Δr    ", (r - r_inv).abs().max())
-print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
+print("inv Δjac  ", (jac_hand * jac_inv - 1.0).abs().max())
 
 print()
 print("====== WWW ======")
@@ -76,15 +80,15 @@ v3 = Vertex([s1, out1, out2])
 
 r = torch.rand(nsamples, 7)
 vbsmap = SingleChannelWWW(
-    torch.tensor(13000.**2), torch.tensor(MW), torch.tensor(MZ), torch.tensor(WZ)
+    torch.tensor(13000.0**2), torch.tensor(MW), torch.tensor(MZ), torch.tensor(WZ)
 )
 (p_hand, x_hand), jac_hand = vbsmap.map([r])
-(r_hand_inv, ), jac_hand_inv = vbsmap.map_inverse([p_hand, x_hand])
+(r_hand_inv,), jac_hand_inv = vbsmap.map_inverse([p_hand, x_hand])
 print("inv Δr    ", (r - r_hand_inv).abs().max())
-print("inv Δjac  ", (jac_hand * jac_hand_inv - 1.).abs().max())
+print("inv Δjac  ", (jac_hand * jac_hand_inv - 1.0).abs().max())
 
 www = Diagram(incoming=[in1, in2], outgoing=[out1, out2, out3], vertices=[v1, v2, v3])
-dmap = DiagramMapping(www, torch.tensor(13000.**2))
+dmap = DiagramMapping(www, torch.tensor(13000.0**2))
 (p_auto, x_auto), jac_auto = dmap.map([r])
 (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
 
@@ -93,7 +97,7 @@ print("Δp max    ", (p_auto - p_hand).abs().max())
 print("Δx max    ", (x_auto - x_hand).abs().max())
 print("Δjac max  ", (jac_auto - jac_hand).abs().max())
 print("inv Δr    ", (r - r_inv).abs().max())
-print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
+print("inv Δjac  ", (jac_hand * jac_inv - 1.0).abs().max())
 
 print()
 print("====== llvvA ======")
@@ -126,7 +130,7 @@ for leptonic in [False, True]:
 
     r = torch.rand(nsamples, 11 if leptonic else 13)
     llvva_map = Diagramm_llvvA(
-        torch.tensor(13000.**2),
+        torch.tensor(13000.0**2),
         torch.tensor(MW),
         torch.tensor(WW),
         mV=torch.tensor(MZ),
@@ -136,35 +140,25 @@ for leptonic in [False, True]:
     if leptonic:
         r_perm = r
     else:
-        perm = [*range(2,13), 0, 1]
+        perm = [*range(2, 13), 0, 1]
         r_perm = r[:, perm]
     (p_hand, x_hand), jac_hand = llvva_map.map([r_perm])
 
     llvva = Diagram(
         incoming=[in1, in2],
         outgoing=[out1, out2, out3, out4, out5],
-        vertices=[v1, v2, v3, v4, v5]
+        vertices=[v1, v2, v3, v4, v5],
     )
-    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic)
+    dmap = DiagramMapping(llvva, torch.tensor(13000.0**2), 20.0**2, leptonic=leptonic)
     (p_auto, x_auto), jac_auto = dmap.map([r])
     (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
-
-    #dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="rambo")
-    #(p_rambo, x_rambo), jac_rambo = dmap.map([r])
-
-    #if not leptonic:
-    #    dmap = DiagramMapping(llvva, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, t_mapping="chili")
-    #    (p_chili, x_chili), jac_chili = dmap.map([r])
-    #    ic(p_auto)
-    #    ic(p_rambo)
-    #    ic(p_chili)
 
     print_info(llvva)
     print("Δp max    ", (p_auto - p_hand).abs().max())
     print("Δx max    ", (x_auto - x_hand).abs().max())
     print("Δjac max  ", (jac_auto - jac_hand).abs().max())
     print("inv Δr    ", (r - r_inv).abs().max())
-    print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
+    print("inv Δjac  ", (jac_hand * jac_inv - 1.0).abs().max())
 
 print()
 print("====== ww_llvv ======")
@@ -194,27 +188,27 @@ for leptonic in [False, True]:
 
     r = torch.rand(nsamples, 8 if leptonic else 10)
     ww_llvv_map = Diagramm_ww_llvv(
-        torch.tensor(13000.**2),
+        torch.tensor(13000.0**2),
         torch.tensor(MW),
         torch.tensor(WW),
         mV=torch.tensor(MZ),
         wV=torch.tensor(WZ),
-        leptonic=leptonic
+        leptonic=leptonic,
     )
     if leptonic:
         r_perm = r
     else:
-        perm = [*range(2,10), 0, 1]
+        perm = [*range(2, 10), 0, 1]
         r_perm = r[:, perm]
     (p_hand, x_hand), jac_hand = ww_llvv_map.map([r_perm])
 
     ww_llvv = Diagram(
         incoming=[in1, in2],
         outgoing=[out1, out2, out3, out4],
-        vertices=[v1, v2, v3, v4]
+        vertices=[v1, v2, v3, v4],
     )
     dmap = DiagramMapping(
-        ww_llvv, torch.tensor(13000.**2), 20.**2, leptonic=leptonic, s_min_epsilon=0.
+        ww_llvv, torch.tensor(13000.0**2), 20.0**2, leptonic=leptonic, s_min_epsilon=0.0
     )
     (p_auto, x_auto), jac_auto = dmap.map([r])
     (r_inv,), jac_inv = dmap.map_inverse([p_auto, x_auto])
@@ -224,4 +218,4 @@ for leptonic in [False, True]:
     print("Δx max    ", (x_auto - x_hand).abs().max())
     print("Δjac max  ", (jac_auto - jac_hand).abs().max())
     print("inv Δr    ", (r - r_inv).abs().max())
-    print("inv Δjac  ", (jac_hand * jac_inv - 1.).abs().max())
+    print("inv Δjac  ", (jac_hand * jac_inv - 1.0).abs().max())

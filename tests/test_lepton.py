@@ -1,8 +1,7 @@
 import torch
 
 torch.set_default_dtype(torch.float64)
-from madspace.single_channel import Diagramm_ww_llvv, Diagramm_llvvA
-from icecream import ic
+from madspace.single_channel import Diagramm_llvvA, Diagramm_ww_llvv
 
 MW = torch.tensor(80.377)
 WW = torch.tensor(2.085)
@@ -29,8 +28,8 @@ for leptonic in [False, True]:
         llmap = Diagramm_ww_llvv(s, MW, WW, mV=mV, wV=wV, leptonic=leptonic)
         r = torch.rand(shape)
         (p_ext, x1x2), det = llmap.map([r])
-        ic(p_ext[...,0].abs().max())
-        ic(p_ext[...,0].min())
+        print(p_ext[..., 0].abs().max())
+        print(p_ext[..., 0].min())
         print("\n")
 
 
@@ -53,6 +52,6 @@ for leptonic in [True, False]:
         llmap = Diagramm_llvvA(s, MW, WW, mV=mV, wV=wV, leptonic=leptonic)
         r = torch.rand(shape)
         (p_ext, x1x2), det = llmap.map([r])
-        ic(p_ext[...,0].abs().max())
-        ic(p_ext[...,0].min())
+        print(p_ext[..., 0].abs().max())
+        print(p_ext[..., 0].min())
         print("\n")
