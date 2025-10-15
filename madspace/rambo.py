@@ -1,21 +1,20 @@
-from typing import Optional, Tuple
 from math import gamma, pi
+from typing import Optional, Tuple
+
 import torch
-from torch import Tensor, sqrt, log, atan2
-
-from .rootfinder.roots import get_u_parameter, get_xi_parameter
-
+from torch import Tensor, atan2, log, sqrt
 
 from .base import PhaseSpaceMapping, TensorList
-from .luminosity import Luminosity, FlatLuminosity, ResonantLuminosity
-from .functional.kinematics import boost, boost_beam, mass, esquare, sqrt_shat
+from .functional.kinematics import boost, boost_beam, esquare, mass, sqrt_shat
 from .functional.ps_utils import (
     build_p_in,
-    pin_to_x1x2,
     map_fourvector_rambo,
     map_fourvector_rambo_diet,
+    pin_to_x1x2,
     two_body_decay_factor,
 )
+from .luminosity import FlatLuminosity, Luminosity, ResonantLuminosity
+from .rootfinder.roots import get_u_parameter, get_xi_parameter
 from .spline_mapping import SplineMapping
 
 # ------------------------------------------
@@ -93,7 +92,7 @@ class Rambo(PhaseSpaceMapping):
 
         # Get scaling factor and match dimensions
         M = mass(Q)  # has shape (b,1)
-        x = e_cm / M  # has shape (b,1)
+        x = e_cm[..., None] / M  # has shape (b,1)
 
         # Boost and refactor
         p_out = boost(q, Q, inverse=True)
